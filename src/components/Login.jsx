@@ -18,9 +18,10 @@ export default function Login() {
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    const res = login(username.trim(), password);
+    setError('');
+    const res = await login(username.trim(), password);
     if (res.ok) navigate(from, { replace: true });
     else setError(res.error);
   };

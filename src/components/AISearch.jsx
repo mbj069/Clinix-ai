@@ -1,29 +1,32 @@
-import { useState } from 'react';
-import { isConfigured } from '../ai/providers/openaiCompatible';
-import { aiSearch } from '../ai/aiService';
-import { useAI } from '../ai/useAI';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getAIStatus, aiSearch } from '../ai/aiClient';
+import { useAI } from '../ai/useAI';
 
 export default function AISearch() {
   const [question, setQuestion] = useState('');
+  const [configured, setConfigured] = useState(null);
   const { run, loading, error, result, reset } = useAI();
-  const configured = isConfigured();
+
+  useEffect(() => {
+    getAIStatus().then((s) => setConfigured(s.hasApiKey)).catch(() => setConfigured(false));
+  }, []);
 
   const ask = () => {
     if (!question.trim() || loading) return;
     reset();
-    run(({ user, can }) => aiSearch({ user, can, question: question.trim() }));
+    run(() => aiSearch(question.trim()));
   };
 
   return (
     <div>
       <h2>AI patient search</h2>
       <p className="muted">
-        Ask about patients in plain language. The AI searches the roster with tools and only sees
+        Ask about patients in plain language. The AI searches the roster on the server and only sees
         what your role is allowed to see.
       </p>
 
-      {!configured && (
+      {configured === false && (
         <div className="panel restricted">
           <strong>No AI provider configured.</strong>
           <p className="muted">An administrator needs to add an API key in <Link to="/settings/ai">Settings → AI</Link> first.</p>
@@ -58,7 +61,7 @@ export default function AISearch() {
         <h3>Try</h3>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {['Show me diabetic patients', 'Who takes atorvastatin?', 'Patients with asthma'].map((ex) => (
-            <button key={ex} className="btn small" onClick={() => { setQuestion(ex); }} disabled={!configured}>
+            <button key={ex} className="btn small" onClick={() => setQuestion(ex)} disabled={!configured}>
               {ex}
             </button>
           ))}

@@ -1,38 +1,43 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { PATIENTS } from '../data/mockData';
-import { logAudit } from '../utils/auditLogger';
-import { isConfigured } from '../ai/providers/openaiCompatible';
-import { summarizePatient } from '../ai/aiService';
+import { api } from '../utils/api';
+import { getAIStatus, aiSummarize } from '../ai/aiClient';
 import { useAI } from '../ai/useAI';
 
 export default function PatientDetail() {
   const { id } = useParams();
   const { user, can } = useAuth();
-  const [patient, setPatient] = useState(() => PATIENTS.find((p) => p.id === id));
+  const [patient, setPatient] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [editingVitals, setEditingVitals] = useState(false);
-  const [vitalsDraft, setVitalsDraft] = useState(patient?.vitals || {});
+  const [vitalsDraft, setVitalsDraft] = useState({});
   const [note, setNote] = useState('');
+  const [aiReady, setAiReady] = useState(false);
+  const ai = useAI();
 
   const canViewSensitive = can('view_sensitive');
   const canEdit = can('edit_patients');
   const canEditVitals = can('edit_vitals') || canEdit;
-  const ai = useAI();
-  const aiConfigured = isConfigured();
 
   useEffect(() => {
-    if (patient) {
-      logAudit({
-        actorId: user.id, actorName: user.name, role: user.role,
-        action: 'VIEW_PATIENT_RECORD', patientId: patient.id,
-        details: `Viewed full record of ${patient.name} (${patient.id})${canViewSensitive ? '' : ' (sensitive fields redacted)'}`,
-      });
-    }
+    setLoading(true);
+    api(`/patients/${id}`)
+      .then((d) => {
+        setPatient(d.patient);
+        setVitalsDraft(d.patient.vitals || {});
+      })
+      .catch((e) => {
+        if (e.status === 404) setNotFound(true);
+      })
+      .finally(() => setLoading(false));
+    getAIStatus().then((s) => setAiReady(s.hasApiKey)).catch(() => setAiReady(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (!patient) {
+  if (loading) return <p className="muted">Loading…</p>;
+  if (notFound || !patient) {
     return (
       <div>
         <h2>Patient not found</h2>
@@ -41,25 +46,31 @@ export default function PatientDetail() {
     );
   }
 
-  const saveVitals = () => {
-    setPatient({ ...patient, vitals: vitalsDraft });
-    setEditingVitals(false);
-    logAudit({
-      actorId: user.id, actorName: user.name, role: user.role,
-      action: 'UPDATE_VITALS', patientId: patient.id,
-      details: `Updated vitals for ${patient.name}: BP ${vitalsDraft.bp}, HR ${vitalsDraft.hr}`,
-    });
+  const saveVitals = async () => {
+    try {
+      const { patient: updated } = await api(`/patients/${id}/vitals`, {
+        method: 'PATCH',
+        body: vitalsDraft,
+      });
+      setPatient(updated);
+      setEditingVitals(false);
+    } catch (e) {
+      alert(e.message);
+    }
   };
 
-  const addNote = () => {
+  const addNote = async () => {
     if (!note.trim()) return;
-    setPatient({ ...patient, notes: `${patient.notes}\n[${new Date().toLocaleDateString()}] ${note.trim()}` });
-    logAudit({
-      actorId: user.id, actorName: user.name, role: user.role,
-      action: 'ADD_CLINICAL_NOTE', patientId: patient.id,
-      details: `Added clinical note for ${patient.name}`,
-    });
-    setNote('');
+    try {
+      const { patient: updated } = await api(`/patients/${id}/notes`, {
+        method: 'POST',
+        body: { note: note.trim() },
+      });
+      setPatient(updated);
+      setNote('');
+    } catch (e) {
+      alert(e.message);
+    }
   };
 
   return (
@@ -106,47 +117,45 @@ export default function PatientDetail() {
       </div>
 
       {canViewSensitive ? (
-        <>
-          <section className="panel">
-            <h3>Clinical information
-              {aiConfigured && (
-                <button
-                  className="btn small"
-                  disabled={ai.loading}
-                  onClick={() => ai.run(({ user, can }) => summarizePatient({ user, can, patient }))}
-                >
-                  {ai.loading ? 'Summarizing…' : '✨ AI summary'}
-                </button>
-              )}
-            </h3>
-            {ai.error && <div className="error">{ai.error}</div>}
-            {ai.result && (
-              <div className="panel" style={{ background: 'var(--bg)' }}>
-                <h4>AI clinical summary <span className="role-badge">AI draft — verify</span></h4>
-                <p className="notes">{ai.result}</p>
-              </div>
+        <section className="panel">
+          <h3>Clinical information
+            {aiReady && (
+              <button
+                className="btn small"
+                disabled={ai.loading}
+                onClick={() => ai.run(() => aiSummarize(patient.id))}
+              >
+                {ai.loading ? 'Summarizing…' : '✨ AI summary'}
+              </button>
             )}
-            <dl>
-              <dt>Allergies</dt><dd>{patient.allergies.join(', ') || 'None known'}</dd>
-              <dt>Conditions</dt><dd>{patient.conditions.join(', ') || '—'}</dd>
-              <dt>SSN</dt><dd className="mono">{patient.ssn}</dd>
-            </dl>
-            <h4>Medications</h4>
-            {patient.medications.length === 0 ? <p className="muted">No active medications.</p> : (
-              <ul>{patient.medications.map((m, i) => (
-                <li key={i}><strong>{m.name}</strong> — {m.dosage}, {m.frequency}</li>
-              ))}</ul>
-            )}
-            <h4>Notes</h4>
-            <p className="notes">{patient.notes}</p>
-            {canEdit && (
-              <div className="note-add">
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a clinical note…" rows={2} />
-                <button className="btn primary small" onClick={addNote}>Add note</button>
-              </div>
-            )}
-          </section>
-        </>
+          </h3>
+          {ai.error && <div className="error">{ai.error}</div>}
+          {ai.result && (
+            <div className="panel" style={{ background: 'var(--bg)' }}>
+              <h4>AI clinical summary <span className="role-badge">AI draft — verify</span></h4>
+              <p className="notes">{ai.result}</p>
+            </div>
+          )}
+          <dl>
+            <dt>Allergies</dt><dd>{patient.allergies.join(', ') || 'None known'}</dd>
+            <dt>Conditions</dt><dd>{patient.conditions.join(', ') || '—'}</dd>
+            <dt>SSN</dt><dd className="mono">{patient.ssn}</dd>
+          </dl>
+          <h4>Medications</h4>
+          {patient.medications.length === 0 ? <p className="muted">No active medications.</p> : (
+            <ul>{patient.medications.map((m, i) => (
+              <li key={i}><strong>{m.name}</strong> — {m.dosage}, {m.frequency}</li>
+            ))}</ul>
+          )}
+          <h4>Notes</h4>
+          <p className="notes">{patient.notes}</p>
+          {canEdit && (
+            <div className="note-add">
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a clinical note…" rows={2} />
+              <button className="btn primary small" onClick={addNote}>Add note</button>
+            </div>
+          )}
+        </section>
       ) : (
         <section className="panel restricted">
           <h3>Clinical information</h3>

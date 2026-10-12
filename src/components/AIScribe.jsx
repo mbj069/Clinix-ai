@@ -1,36 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { isConfigured } from '../ai/providers/openaiCompatible';
-import { scribeNotes } from '../ai/aiService';
+import { getAIStatus, aiScribe } from '../ai/aiClient';
 import { useAI } from '../ai/useAI';
-import { PATIENTS } from '../data/mockData';
-import { logAudit } from '../utils/auditLogger';
-import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
 
 export default function AIScribe() {
-  const { user } = useAuth();
-  const [patientId, setPatientId] = useState(PATIENTS[0].id);
+  const [patients, setPatients] = useState([]);
+  const [patientId, setPatientId] = useState('');
   const [rough, setRough] = useState('');
+  const [configured, setConfigured] = useState(null);
   const { run, loading, error, result, reset } = useAI();
   const [saved, setSaved] = useState(false);
-  const configured = isConfigured();
-  const patient = PATIENTS.find((p) => p.id === patientId);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  useEffect(() => {
+    api('/patients').then((d) => {
+      setPatients(d.patients);
+      if (d.patients.length) setPatientId(d.patients[0].id);
+    }).catch(() => {});
+    getAIStatus().then((s) => setConfigured(s.hasApiKey)).catch(() => setConfigured(false));
+  }, []);
+
+  const patient = patients.find((p) => p.id === patientId);
 
   const generate = () => {
     if (!rough.trim() || loading) return;
     setSaved(false);
+    setSaveMsg('');
     reset();
-    run(() => scribeNotes({ user, patient, roughNotes: rough.trim() }));
+    run(() => aiScribe(patientId, rough.trim()));
   };
 
-  const saveToRecord = () => {
+  const saveToRecord = async () => {
     if (!result) return;
-    logAudit({
-      actorId: user.id, actorName: user.name, role: user.role,
-      action: 'SCRIBE_SAVED', patientId: patient.id,
-      details: `Clinician approved and saved AI SOAP draft for ${patient.name} (${patient.id})`,
-    });
-    setSaved(true);
+    try {
+      await api(`/patients/${patientId}/notes`, {
+        method: 'POST',
+        body: { note: `[AI-assisted draft, clinician-approved]\n${result}` },
+      });
+      setSaved(true);
+      setSaveMsg('Approved draft saved to the patient record and audit-logged.');
+    } catch (e) {
+      setSaveMsg(e.message);
+    }
   };
 
   return (
@@ -41,7 +53,7 @@ export default function AIScribe() {
         anything touches the record.
       </p>
 
-      {!configured && (
+      {configured === false && (
         <div className="panel restricted">
           <strong>No AI provider configured.</strong>
           <p className="muted">An administrator needs to add an API key in <Link to="/settings/ai">Settings → AI</Link> first.</p>
@@ -51,7 +63,7 @@ export default function AIScribe() {
       <div className="panel" style={{ maxWidth: 720 }}>
         <label>Patient
           <select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
-            {PATIENTS.map((p) => (
+            {patients.map((p) => (
               <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
             ))}
           </select>
@@ -79,8 +91,9 @@ export default function AIScribe() {
           {!saved ? (
             <button className="btn primary small" onClick={saveToRecord}>Approve & save to record</button>
           ) : (
-            <p><strong>✓ Approved and logged.</strong> <Link to={`/patients/${patient.id}`}>View patient record →</Link></p>
+            <p><strong>✓ {saveMsg || 'Saved.'}</strong> <Link to={`/patients/${patientId}`}>View patient record →</Link></p>
           )}
+          {saveMsg && !saved && <p className="error">{saveMsg}</p>}
         </div>
       )}
     </div>

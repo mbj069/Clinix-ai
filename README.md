@@ -1,38 +1,45 @@
-# Clinix AI — Patient-Record Prototype
+# Clinix AI — Patient-Record Application
 
-**By Nexus-Tech Solutions** · React prototype for a healthcare client.
+**By Nexus-Tech Solutions** · Full-stack patient-record application for a healthcare client.
 
-A patient-record management prototype demonstrating **authentication**, **role-based access control (RBAC)**, and **audit logging** for sensitive health data.
+Authentication, role-based access control (RBAC), server-side audit logging for sensitive health data, and a bring-your-own-AI gateway.
 
-> ⚠️ **Prototype only.** All patient data is synthetic and fictional. Authentication uses demo credentials, and audit logs are stored in the browser. This is **not** HIPAA-compliant and must not be used with real patient data. A production build needs a secure backend, hashed credentials, encrypted storage, and a tamper-evident audit store.
+> ⚠️ **All demo data is synthetic and fictional.** This is not HIPAA-compliant out of the box — see *Production hardening* below before handling real patient data.
+
+## Architecture
+
+```
+clinix-ai/
+├── src/                  # React frontend (Vite)
+│   ├── ai/               # AI client (calls backend; no provider keys in browser)
+│   ├── components/       # Login, Dashboard, Patients, AuditLog, AI pages
+│   ├── context/          # Auth (JWT)
+│   └── utils/api.js      # API client
+└── server/               # Express backend (Node 22.5+)
+    └── src/
+        ├── index.js      # app entry
+        ├── db.js         # SQLite (node:sqlite) + schema
+        ├── seed.js       # demo users + patients
+        ├── audit.js      # append-only audit writer
+        ├── middleware/   # JWT auth, RBAC
+        └── routes/       # auth, patients, audit, ai
+```
 
 ## Features
 
-- **Authentication** — login with demo accounts; session persisted in the browser
-- **Role-based access control** — 4 roles with distinct permissions:
+- **Authentication** — bcrypt-hashed passwords, JWT sessions (8h), 4 demo roles
+- **RBAC, enforced server-side** — the API filters every response to the caller's role; frontend checks are UX only
   | Role | Access |
   |---|---|
-  | Administrator | Full access + audit log + user management |
-  | Doctor | Patient records, sensitive clinical data, notes |
-  | Nurse | Patient records, vitals editing |
-  | Receptionist | Basic demographics only (sensitive data redacted) |
-- **Audit logging** — every login, record view, vitals update, note, and AI interaction is logged with actor, role, and timestamp; viewable/filterable by admins
-- **Patient records** — demographics, vitals, allergies, conditions, medications, clinical notes
-
-## AI integration (Phase 1)
-
-Bring-your-own-AI via any **OpenAI-compatible** provider (OpenAI, Azure OpenAI, Ollama, vLLM, OpenRouter, …). An administrator configures the base URL, API key, and model in **Settings → AI**; swapping vendors needs no code changes.
-
-**Design guarantees:**
-- The AI only ever sees what the signed-in user's role permits — patient data is RBAC-filtered *before* it reaches the provider
-- Every AI request is written to the audit log (`AI_SUMMARY`, `AI_SCRIBE`, `AI_SEARCH`, …)
-
-**Features:**
-| Feature | Route | Who |
-|---|---|---|
-| Clinical summarizer — one-click patient summary | Patient record → ✨ AI summary | Doctor, Nurse, Admin |
-| AI scribe — rough notes → reviewed SOAP draft | AI scribe | Doctor, Admin |
-| Natural-language search — tool-calling patient search | AI search | All roles (results RBAC-filtered) |
+  | Administrator | Full access + audit log + AI config |
+  | Doctor | Records, sensitive data, notes, scribe |
+  | Nurse | Records, vitals editing |
+  | Receptionist | Basic demographics only (clinical data redacted + 403 on sensitive routes) |
+- **Audit logging** — append-only server table; no delete/update API exists
+- **AI gateway** — provider API keys stay on the server; admin configures any OpenAI-compatible provider in Settings → AI
+  - Clinical summarizer (patient record → ✨ AI summary)
+  - AI scribe (rough notes → clinician-approved SOAP draft)
+  - Natural-language patient search (agentic tool loop, RBAC-filtered)
 
 ## Demo accounts
 
@@ -45,53 +52,46 @@ Bring-your-own-AI via any **OpenAI-compatible** provider (OpenAI, Azure OpenAI, 
 
 ## Getting started
 
+Prerequisites: Node.js ≥ 22.5.
+
 ```bash
+# Backend
+cd server
+cp .env.example .env        # then set JWT_SECRET and AI_API_KEY
 npm install
-npm run dev
+npm run seed                # creates data/clinix.db with demo users + patients
+npm run dev                 # http://localhost:3001
+
+# Frontend (new terminal, repo root)
+npm install
+npm run dev                 # http://localhost:5173 (proxies /api to :3001)
 ```
 
-Open http://localhost:5173 and sign in with a demo account above.
+To enable AI features, set `AI_API_KEY` in `server/.env` (or configure it in the app as admin via Settings → AI).
 
-## Build
+## API reference
 
-```bash
-npm run build
-```
-
-## Project structure
-
-```
-src/
-├── main.jsx                 # entry point
-├── App.jsx                  # routes + shell layout
-├── context/AuthContext.jsx  # session + permission checks
-├── data/mockData.js         # synthetic users, roles, patients
-├── utils/auditLogger.js     # audit trail (localStorage)
-├── ai/
-│   ├── aiService.js         # orchestration: RBAC + audit + agentic loop
-│   ├── prompts.js           # clinical system prompts per feature
-│   ├── tools.js             # RBAC-filtered patient context + tool defs
-│   ├── useAI.js             # React hook (loading/error/result)
-│   └── providers/
-│       └── openaiCompatible.js  # chat/completions adapter + key config
-├── components/
-│   ├── Login.jsx
-│   ├── Dashboard.jsx
-│   ├── PatientList.jsx
-│   ├── PatientDetail.jsx    # RBAC-gated sensitive sections + AI summary
-│   ├── AuditLog.jsx
-│   ├── AISearch.jsx         # natural-language patient search
-│   ├── AIScribe.jsx         # rough notes → reviewed SOAP draft
-│   ├── AISettings.jsx       # admin provider configuration
-│   └── ProtectedRoute.jsx
-└── styles/index.css
-```
+| Method | Path | Auth | Permission |
+|---|---|---|---|
+| POST | `/api/auth/login` | — | — |
+| GET | `/api/auth/me` | JWT | — |
+| GET | `/api/patients?q=` | JWT | view basic |
+| GET | `/api/patients/:id` | JWT | view basic (fields filtered) |
+| PATCH | `/api/patients/:id/vitals` | JWT | edit_vitals |
+| POST | `/api/patients/:id/notes` | JWT | edit_patients |
+| GET | `/api/audit` | JWT | view_audit_log |
+| POST | `/api/ai/summary` | JWT | view_sensitive |
+| POST | `/api/ai/scribe` | JWT | edit_patients |
+| POST | `/api/ai/search` | JWT | any signed-in |
+| GET/PUT | `/api/ai/config` | JWT | ai_config |
 
 ## Production hardening checklist
 
-- [ ] Server-side auth with hashed passwords (bcrypt/argon2) + MFA
-- [ ] HTTPS everywhere; encrypted data at rest
-- [ ] Append-only, tamper-evident audit store (not browser storage)
-- [ ] Field-level encryption for SSN/PHI
+- [ ] PostgreSQL instead of SQLite; encrypted backups
+- [ ] `JWT_SECRET` from a secrets manager; short token TTL + refresh rotation
+- [ ] Encrypt the AI provider key at rest (KMS/vault)
+- [ ] HTTPS everywhere (TLS termination), HSTS
+- [ ] Rate limiting + request validation hardening
+- [ ] Field-level encryption for PHI at rest
 - [ ] Session timeout + automatic logout
 - [ ] HIPAA / local healthcare compliance review

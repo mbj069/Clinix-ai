@@ -1,60 +1,65 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { PATIENTS } from '../data/mockData';
-import { logAudit } from '../utils/auditLogger';
+import { api } from '../utils/api';
 
 export default function PatientList() {
   const [q, setQ] = useState('');
-  const { user, can } = useAuth();
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { can } = useAuth();
   const fullAccess = can('view_patients');
 
-  const results = PATIENTS.filter((p) =>
-    p.name.toLowerCase().includes(q.toLowerCase()) || p.id.includes(q)
-  );
-
-  const openRecord = (p) => {
-    logAudit({
-      actorId: user.id, actorName: user.name, role: user.role,
-      action: 'VIEW_PATIENT_LIST_ITEM', patientId: p.id,
-      details: `Opened patient ${p.name} (${p.id}) from list`,
-    });
-  };
+  useEffect(() => {
+    setLoading(true);
+    const t = setTimeout(() => {
+      const params = q ? `?q=${encodeURIComponent(q)}` : '';
+      api(`/patients${params}`)
+        .then((d) => setPatients(d.patients))
+        .catch(() => setPatients([]))
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
 
   return (
     <div>
       <h2>Patients</h2>
       <input
         className="search"
-        placeholder="Search by name or ID…"
+        placeholder="Search by name, ID, or condition…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th><th>ID</th><th>DOB</th>
-              {fullAccess && <th>Conditions</th>}
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((p) => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td className="mono">{p.id}</td>
-                <td>{p.dob}</td>
-                {fullAccess && <td>{p.conditions.join(', ') || '—'}</td>}
-                <td><Link to={`/patients/${p.id}`} onClick={() => openRecord(p)}>Open</Link></td>
+      {loading ? (
+        <p className="muted">Loading…</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th><th>ID</th><th>DOB</th>
+                {fullAccess && <th>Conditions</th>}
+                <th></th>
               </tr>
-            ))}
-            {results.length === 0 && (
-              <tr><td colSpan={5} className="muted">No patients match.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {patients.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.name}</td>
+                  <td className="mono">{p.id}</td>
+                  <td>{p.dob}</td>
+                  {fullAccess && <td>{p.conditions.join(', ') || '—'}</td>}
+                  <td><Link to={`/patients/${p.id}`}>Open</Link></td>
+                </tr>
+              ))}
+              {patients.length === 0 && (
+                <tr><td colSpan={5} className="muted">No patients match.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
       {!fullAccess && (
         <p className="muted">Your role shows basic demographics only. Sensitive clinical data is hidden.</p>
       )}
