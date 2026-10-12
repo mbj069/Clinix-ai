@@ -16,8 +16,23 @@ A patient-record management prototype demonstrating **authentication**, **role-b
   | Doctor | Patient records, sensitive clinical data, notes |
   | Nurse | Patient records, vitals editing |
   | Receptionist | Basic demographics only (sensitive data redacted) |
-- **Audit logging** — every login, record view, vitals update, and note is logged with actor, role, and timestamp; viewable/filterable by admins
+- **Audit logging** — every login, record view, vitals update, note, and AI interaction is logged with actor, role, and timestamp; viewable/filterable by admins
 - **Patient records** — demographics, vitals, allergies, conditions, medications, clinical notes
+
+## AI integration (Phase 1)
+
+Bring-your-own-AI via any **OpenAI-compatible** provider (OpenAI, Azure OpenAI, Ollama, vLLM, OpenRouter, …). An administrator configures the base URL, API key, and model in **Settings → AI**; swapping vendors needs no code changes.
+
+**Design guarantees:**
+- The AI only ever sees what the signed-in user's role permits — patient data is RBAC-filtered *before* it reaches the provider
+- Every AI request is written to the audit log (`AI_SUMMARY`, `AI_SCRIBE`, `AI_SEARCH`, …)
+
+**Features:**
+| Feature | Route | Who |
+|---|---|---|
+| Clinical summarizer — one-click patient summary | Patient record → ✨ AI summary | Doctor, Nurse, Admin |
+| AI scribe — rough notes → reviewed SOAP draft | AI scribe | Doctor, Admin |
+| Natural-language search — tool-calling patient search | AI search | All roles (results RBAC-filtered) |
 
 ## Demo accounts
 
@@ -52,12 +67,22 @@ src/
 ├── context/AuthContext.jsx  # session + permission checks
 ├── data/mockData.js         # synthetic users, roles, patients
 ├── utils/auditLogger.js     # audit trail (localStorage)
+├── ai/
+│   ├── aiService.js         # orchestration: RBAC + audit + agentic loop
+│   ├── prompts.js           # clinical system prompts per feature
+│   ├── tools.js             # RBAC-filtered patient context + tool defs
+│   ├── useAI.js             # React hook (loading/error/result)
+│   └── providers/
+│       └── openaiCompatible.js  # chat/completions adapter + key config
 ├── components/
 │   ├── Login.jsx
 │   ├── Dashboard.jsx
 │   ├── PatientList.jsx
-│   ├── PatientDetail.jsx    # RBAC-gated sensitive sections
+│   ├── PatientDetail.jsx    # RBAC-gated sensitive sections + AI summary
 │   ├── AuditLog.jsx
+│   ├── AISearch.jsx         # natural-language patient search
+│   ├── AIScribe.jsx         # rough notes → reviewed SOAP draft
+│   ├── AISettings.jsx       # admin provider configuration
 │   └── ProtectedRoute.jsx
 └── styles/index.css
 ```

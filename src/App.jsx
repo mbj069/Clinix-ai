@@ -6,6 +6,9 @@ import Dashboard from './components/Dashboard';
 import PatientList from './components/PatientList';
 import PatientDetail from './components/PatientDetail';
 import AuditLog from './components/AuditLog';
+import AISearch from './components/AISearch';
+import AIScribe from './components/AIScribe';
+import AISettings from './components/AISettings';
 
 function Shell({ children }) {
   const { user, logout, can } = useAuth();
@@ -23,7 +26,10 @@ function Shell({ children }) {
         <nav>
           <Link to="/">Dashboard</Link>
           <Link to="/patients">Patients</Link>
+          <Link to="/ai-search">AI search</Link>
+          {can('edit_patients') && <Link to="/scribe">AI scribe</Link>}
           {can('view_audit_log') && <Link to="/audit">Audit log</Link>}
+          {can('manage_users') && <Link to="/settings/ai">AI settings</Link>}
         </nav>
         <div className="userbox">
           <span>{user.name} <span className="role-badge">{user.role}</span></span>
@@ -63,6 +69,17 @@ export default function App() {
                 <Route path="/audit" element={
                   <ProtectedRoute permission="view_audit_log">
                     <AuditLog />
+                  </ProtectedRoute>
+                } />
+                <Route path="/ai-search" element={<AISearch />} />
+                <Route path="/scribe" element={
+                  <ProtectedRoute permission="edit_patients">
+                    <AIScribe />
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings/ai" element={
+                  <ProtectedRoute permission="manage_users">
+                    <AISettings />
                   </ProtectedRoute>
                 } />
               </Routes>

@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { PATIENTS } from '../data/mockData';
 import { logAudit } from '../utils/auditLogger';
+import { isConfigured } from '../ai/providers/openaiCompatible';
+import { summarizePatient } from '../ai/aiService';
+import { useAI } from '../ai/useAI';
 
 export default function PatientDetail() {
   const { id } = useParams();
@@ -15,6 +18,8 @@ export default function PatientDetail() {
   const canViewSensitive = can('view_sensitive');
   const canEdit = can('edit_patients');
   const canEditVitals = can('edit_vitals') || canEdit;
+  const ai = useAI();
+  const aiConfigured = isConfigured();
 
   useEffect(() => {
     if (patient) {
@@ -103,7 +108,24 @@ export default function PatientDetail() {
       {canViewSensitive ? (
         <>
           <section className="panel">
-            <h3>Clinical information</h3>
+            <h3>Clinical information
+              {aiConfigured && (
+                <button
+                  className="btn small"
+                  disabled={ai.loading}
+                  onClick={() => ai.run(({ user, can }) => summarizePatient({ user, can, patient }))}
+                >
+                  {ai.loading ? 'Summarizing…' : '✨ AI summary'}
+                </button>
+              )}
+            </h3>
+            {ai.error && <div className="error">{ai.error}</div>}
+            {ai.result && (
+              <div className="panel" style={{ background: 'var(--bg)' }}>
+                <h4>AI clinical summary <span className="role-badge">AI draft — verify</span></h4>
+                <p className="notes">{ai.result}</p>
+              </div>
+            )}
             <dl>
               <dt>Allergies</dt><dd>{patient.allergies.join(', ') || 'None known'}</dd>
               <dt>Conditions</dt><dd>{patient.conditions.join(', ') || '—'}</dd>
