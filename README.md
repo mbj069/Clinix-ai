@@ -69,6 +69,16 @@ npm run dev                 # http://localhost:5173 (proxies /api to :3001)
 
 To enable AI features, set `AI_API_KEY` in `server/.env` (or configure it in the app as admin via Settings → AI).
 
+## Deploying (Render, free)
+
+The backend serves the built frontend too, so one web service is the whole app:
+
+1. Push to GitHub, then in [Render](https://dashboard.render.com) → **New + → Blueprint** → connect the `Clinix-ai` repo. Render reads `render.yaml` and creates the service.
+2. On first deploy Render generates `JWT_SECRET` automatically. No other env vars are needed for the demo (AI features stay off until an admin adds a provider key in Settings → AI).
+3. The first boot seeds the demo users/patients automatically (same logins as above).
+
+Notes for a client demo: the free tier sleeps after ~15 minutes idle, so the first load can take ~30–60s to wake. The free disk is ephemeral — a restart or redeploy wipes the database and re-seeds fresh demo data (audit history resets too). That's fine for a prototype demo, not for real patient data.
+
 ## API reference
 
 | Method | Path | Auth | Permission |
