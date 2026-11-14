@@ -72,6 +72,11 @@ export function initSchema() {
   db.prepare('INSERT OR IGNORE INTO ai_config (id) VALUES (1)').run();
 }
 
+// Create the schema on import so modules that prepare statements at load
+// time (audit.js) never run against missing tables. Idempotent, so the
+// explicit initSchema() calls in index.js / seed.js stay harmless.
+initSchema();
+
 // --- Row mappers ------------------------------------------------------------
 
 const J = (s, fallback) => {

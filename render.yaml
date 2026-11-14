@@ -1,0 +1,17 @@
+# Render Blueprint — deploys Clinix AI as a single free web service:
+# the Express backend serves the API and the built Vite frontend.
+services:
+  - type: web
+    name: clinix-ai
+    env: node
+    plan: free
+    healthCheckPath: /api/health
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h
