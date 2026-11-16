@@ -63,6 +63,52 @@ const PATIENTS = [
   },
 ];
 
+const isoDay = (offsetDays) => {
+  const t = new Date(Date.now() + offsetDays * 864e5);
+  return t.toISOString().slice(0, 10);
+};
+
+const APPOINTMENTS = [
+  { id: 1, patient_id: 'p-1001', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: 0, time: '09:00', reason: 'Diabetes follow-up', status: 'checked_in' },
+  { id: 2, patient_id: 'p-1004', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: 0, time: '10:30', reason: 'Cardiology review', status: 'scheduled' },
+  { id: 3, patient_id: 'p-1002', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: 0, time: '11:15', reason: 'Asthma review', status: 'completed' },
+  { id: 4, patient_id: 'p-1003', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: 1, time: '09:30', reason: 'Migraine follow-up', status: 'scheduled' },
+  { id: 5, patient_id: 'p-1005', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: 1, time: '14:00', reason: 'Annual physical', status: 'scheduled' },
+];
+
+const CONSULTATIONS = [
+  { id: 1, patient_id: 'p-1001', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: -7, diagnosis: 'Type 2 Diabetes — controlled', plan: 'Continue Metformin 500mg twice daily. HbA1c in 3 months. Diet review.' },
+  { id: 2, patient_id: 'p-1004', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: -14, diagnosis: 'Coronary artery disease — stable', plan: 'Continue Atorvastatin + Clopidogrel. Stress test scheduled. Low-salt diet.' },
+  { id: 3, patient_id: 'p-1002', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', day: -3, diagnosis: 'Asthma — mild, intermittent', plan: 'Albuterol as needed. Inhaler technique reviewed.' },
+];
+
+const PRESCRIPTIONS = [
+  { id: 1, patient_id: 'p-1001', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', medication: 'Metformin', dosage: '500mg', frequency: 'Twice daily', duration: '90 days', notes: '', status: 'active' },
+  { id: 2, patient_id: 'p-1001', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', medication: 'Lisinopril', dosage: '10mg', frequency: 'Once daily', duration: '90 days', notes: 'Monitor BP.', status: 'active' },
+  { id: 3, patient_id: 'p-1004', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', medication: 'Atorvastatin', dosage: '40mg', frequency: 'Once daily', duration: '90 days', notes: '', status: 'active' },
+  { id: 4, patient_id: 'p-1002', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', medication: 'Albuterol', dosage: '90mcg', frequency: 'As needed', duration: '30 days', notes: '', status: 'active' },
+];
+
+const LAB_ORDERS = [
+  { id: 1, patient_id: 'p-1001', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', test_name: 'HbA1c', status: 'completed', notes: 'Quarterly diabetes panel.' },
+  { id: 2, patient_id: 'p-1004', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', test_name: 'Lipid panel', status: 'ordered', notes: 'Fasting sample.' },
+  { id: 3, patient_id: 'p-1003', doctor_id: 'u-doc-1', doctor_name: 'Dr. Daniel Reed', test_name: 'Complete blood count (CBC)', status: 'collected', notes: '' },
+];
+
+const VITALS_HISTORY = [
+  { id: 1, patient_id: 'p-1001', recorded_by: 'u-nurse-1', recorded_by_name: 'Nina Cole, RN', bp: '130/85', hr: 74, temp: '98.7°F', spo2: '98%', day: -7 },
+  { id: 2, patient_id: 'p-1001', recorded_by: 'u-nurse-1', recorded_by_name: 'Nina Cole, RN', bp: '128/84', hr: 72, temp: '98.6°F', spo2: '98%', day: -1 },
+  { id: 3, patient_id: 'p-1004', recorded_by: 'u-nurse-1', recorded_by_name: 'Nina Cole, RN', bp: '134/88', hr: 72, temp: '98.2°F', spo2: '97%', day: -14 },
+  { id: 4, patient_id: 'p-1002', recorded_by: 'u-nurse-1', recorded_by_name: 'Nina Cole, RN', bp: '118/76', hr: 68, temp: '98.2°F', spo2: '99%', day: -3 },
+];
+
+const NURSING_TASKS = [
+  { id: 1, patient_id: 'p-1001', task: 'Check fasting blood sugar before breakfast', due: 'Today, 07:00', status: 'open' },
+  { id: 2, patient_id: 'p-1004', task: 'Dressing change — post-procedure site', due: 'Today, 10:00', status: 'open' },
+  { id: 3, patient_id: 'p-1002', task: 'Demonstrate inhaler technique to patient', due: 'Today, 12:00', status: 'open' },
+  { id: 4, patient_id: 'p-1005', task: 'Discharge paperwork and follow-up booking', due: 'Yesterday', status: 'done' },
+];
+
 export async function seedDatabase() {
   for (const u of USERS) {
     await run(
@@ -92,6 +138,56 @@ export async function seedDatabase() {
     );
     console.log(`patient: ${p.name} (${p.id})`);
   }
+
+  for (const a of APPOINTMENTS) {
+    await run(
+      `INSERT OR IGNORE INTO appointments (id, patient_id, doctor_id, doctor_name, date, time, reason, status, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'u-recep-1')`,
+      [a.id, a.patient_id, a.doctor_id, a.doctor_name, isoDay(a.day), a.time, a.reason, a.status]
+    );
+  }
+  console.log(`appointments: ${APPOINTMENTS.length} seeded`);
+
+  for (const c of CONSULTATIONS) {
+    await run(
+      `INSERT OR IGNORE INTO consultations (id, patient_id, doctor_id, doctor_name, date, diagnosis, plan)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [c.id, c.patient_id, c.doctor_id, c.doctor_name, isoDay(c.day), c.diagnosis, c.plan]
+    );
+  }
+
+  for (const p of PRESCRIPTIONS) {
+    await run(
+      `INSERT OR IGNORE INTO prescriptions (id, patient_id, doctor_id, doctor_name, medication, dosage, frequency, duration, notes, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.id, p.patient_id, p.doctor_id, p.doctor_name, p.medication, p.dosage, p.frequency, p.duration, p.notes, p.status]
+    );
+  }
+
+  for (const l of LAB_ORDERS) {
+    await run(
+      `INSERT OR IGNORE INTO lab_orders (id, patient_id, doctor_id, doctor_name, test_name, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [l.id, l.patient_id, l.doctor_id, l.doctor_name, l.test_name, l.status, l.notes]
+    );
+  }
+
+  for (const v of VITALS_HISTORY) {
+    await run(
+      `INSERT OR IGNORE INTO vitals_history (id, patient_id, recorded_by, recorded_by_name, bp, hr, temp, spo2, recorded_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ? || ' days'))`,
+      [v.id, v.patient_id, v.recorded_by, v.recorded_by_name, v.bp, v.hr, v.temp, v.spo2, String(v.day)]
+    );
+  }
+
+  for (const t of NURSING_TASKS) {
+    await run(
+      `INSERT OR IGNORE INTO nursing_tasks (id, patient_id, task, due, status, created_by, created_by_name)
+       VALUES (?, ?, ?, ?, ?, 'u-nurse-1', 'Nina Cole, RN')`,
+      [t.id, t.patient_id, t.task, t.due, t.status]
+    );
+  }
+  console.log('clinical seed: consultations, prescriptions, lab orders, vitals, tasks');
 }
 
 // Run directly: `npm run seed`. Imported: the caller decides when to seed.

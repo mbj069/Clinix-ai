@@ -2,10 +2,10 @@
 // but the server is the real gate; frontend checks are UX only.
 
 export const ROLES = {
-  admin: ['view_patients', 'edit_patients', 'view_sensitive', 'manage_users', 'view_audit_log', 'schedule', 'edit_vitals', 'ai_config'],
-  doctor: ['view_patients', 'edit_patients', 'view_sensitive', 'schedule', 'edit_vitals'],
-  nurse: ['view_patients', 'edit_vitals', 'schedule'],
-  receptionist: ['view_patients_basic', 'schedule'],
+  admin: ['view_patients', 'add_patients', 'edit_patients', 'view_sensitive', 'manage_users', 'view_audit_log', 'schedule', 'edit_vitals', 'ai_config', 'consult', 'prescribe', 'order_lab', 'manage_tasks'],
+  doctor: ['view_patients', 'add_patients', 'edit_patients', 'view_sensitive', 'schedule', 'edit_vitals', 'consult', 'prescribe', 'order_lab'],
+  nurse: ['view_patients', 'edit_vitals', 'schedule', 'manage_tasks'],
+  receptionist: ['view_patients_basic', 'add_patients', 'schedule'],
 };
 
 export function can(role, permission) {

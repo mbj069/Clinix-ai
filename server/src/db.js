@@ -102,9 +102,101 @@ export async function initSchema() {
       model TEXT NOT NULL DEFAULT 'gpt-4o-mini',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Appointments (reception books, doctor/nurse see the day's queue).
+    CREATE TABLE IF NOT EXISTS appointments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id TEXT NOT NULL,
+      doctor_id TEXT NOT NULL DEFAULT '',
+      doctor_name TEXT NOT NULL DEFAULT '',
+      date TEXT NOT NULL,
+      time TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','checked_in','completed','cancelled','no_show')),
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_appt_date ON appointments(date);
+    CREATE INDEX IF NOT EXISTS idx_appt_patient ON appointments(patient_id);
+
+    -- Doctor consultations (diagnosis + plan, per patient).
+    CREATE TABLE IF NOT EXISTS consultations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id TEXT NOT NULL,
+      doctor_id TEXT NOT NULL,
+      doctor_name TEXT NOT NULL,
+      date TEXT NOT NULL DEFAULT (date('now')),
+      diagnosis TEXT NOT NULL,
+      plan TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cons_patient ON consultations(patient_id);
+
+    -- Prescriptions (doctor writes; pharmacy dispenses in phase 2).
+    CREATE TABLE IF NOT EXISTS prescriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id TEXT NOT NULL,
+      doctor_id TEXT NOT NULL,
+      doctor_name TEXT NOT NULL,
+      medication TEXT NOT NULL,
+      dosage TEXT NOT NULL,
+      frequency TEXT NOT NULL,
+      duration TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_rx_patient ON prescriptions(patient_id);
+
+    -- Lab test orders (doctor orders; lab module fulfils in phase 2).
+    CREATE TABLE IF NOT EXISTS lab_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id TEXT NOT NULL,
+      doctor_id TEXT NOT NULL,
+      doctor_name TEXT NOT NULL,
+      test_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ordered' CHECK (status IN ('ordered','collected','completed','cancelled')),
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_lab_patient ON lab_orders(patient_id);
+
+    -- Vitals history (every recording kept; patients.vitals holds the latest).
+    CREATE TABLE IF NOT EXISTS vitals_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id TEXT NOT NULL,
+      recorded_by TEXT NOT NULL,
+      recorded_by_name TEXT NOT NULL,
+      bp TEXT NOT NULL DEFAULT '',
+      hr INTEGER,
+      temp TEXT NOT NULL DEFAULT '',
+      spo2 TEXT NOT NULL DEFAULT '',
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_vitals_patient ON vitals_history(patient_id, recorded_at DESC);
+
+    -- Nursing / ward tasks.
+    CREATE TABLE IF NOT EXISTS nursing_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id TEXT NOT NULL,
+      task TEXT NOT NULL,
+      due TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done')),
+      created_by TEXT NOT NULL,
+      created_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_patient ON nursing_tasks(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON nursing_tasks(status);
   `);
   // INSERT OR IGNORE can't be in the same executeMultiple reliably across drivers — separate step.
   await client.execute('INSERT OR IGNORE INTO ai_config (id) VALUES (1)');
+  // Lightweight migration: user accounts can be deactivated (added in v2).
+  try {
+    await client.execute("ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1");
+  } catch {
+    // Column already exists — nothing to do.
+  }
 }
 
 // Schema ready before any query: run at import (top-level await).
@@ -143,4 +235,61 @@ export function mapUser(row) {
   if (!row) return null;
   const { password_hash, ...safe } = row;
   return safe;
+}
+
+export function mapAppointment(row) {
+  if (!row) return null;
+  return {
+    id: row.id, patientId: row.patient_id, patientName: row.patient_name || '',
+    doctorId: row.doctor_id, doctorName: row.doctor_name || '',
+    date: row.date, time: row.time, reason: row.reason,
+    status: row.status, createdBy: row.created_by, createdAt: row.created_at,
+  };
+}
+
+export function mapConsultation(row) {
+  if (!row) return null;
+  return {
+    id: row.id, patientId: row.patient_id, doctorId: row.doctor_id,
+    doctorName: row.doctor_name, date: row.date,
+    diagnosis: row.diagnosis, plan: row.plan, createdAt: row.created_at,
+  };
+}
+
+export function mapPrescription(row) {
+  if (!row) return null;
+  return {
+    id: row.id, patientId: row.patient_id, doctorId: row.doctor_id,
+    doctorName: row.doctor_name, medication: row.medication, dosage: row.dosage,
+    frequency: row.frequency, duration: row.duration, notes: row.notes,
+    status: row.status, createdAt: row.created_at,
+  };
+}
+
+export function mapLabOrder(row) {
+  if (!row) return null;
+  return {
+    id: row.id, patientId: row.patient_id, doctorId: row.doctor_id,
+    doctorName: row.doctor_name, testName: row.test_name,
+    status: row.status, notes: row.notes, createdAt: row.created_at,
+  };
+}
+
+export function mapVitals(row) {
+  if (!row) return null;
+  return {
+    id: row.id, patientId: row.patient_id, recordedBy: row.recorded_by,
+    recordedByName: row.recorded_by_name, bp: row.bp, hr: row.hr,
+    temp: row.temp, spo2: row.spo2, recordedAt: row.recorded_at,
+  };
+}
+
+export function mapTask(row) {
+  if (!row) return null;
+  return {
+    id: row.id, patientId: row.patient_id, patientName: row.patient_name || '',
+    task: row.task, due: row.due, status: row.status,
+    createdBy: row.created_by, createdByName: row.created_by_name,
+    createdAt: row.created_at,
+  };
 }
