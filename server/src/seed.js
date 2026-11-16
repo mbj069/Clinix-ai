@@ -139,6 +139,14 @@ export async function seedDatabase() {
     console.log(`patient: ${p.name} (${p.id})`);
   }
 
+  await seedClinical();
+}
+
+// Demo rows for the v2 modules (appointments, consultations, prescriptions,
+// lab orders, vitals history, nursing tasks). Idempotent (INSERT OR IGNORE
+// with fixed ids) so it is safe to run on every boot of a trial deployment —
+// an existing live DB gains the demo rows without touching real data.
+export async function seedClinical() {
   for (const a of APPOINTMENTS) {
     await run(
       `INSERT OR IGNORE INTO appointments (id, patient_id, doctor_id, doctor_name, date, time, reason, status, created_by)
