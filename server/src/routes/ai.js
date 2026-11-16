@@ -11,6 +11,7 @@ import { queryOne, queryAll, run, mapPatient } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission, can, filterPatientFor } from '../middleware/rbac.js';
 import { audit } from '../audit.js';
+import { encryptSecret, decryptSecret } from '../crypto.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -22,7 +23,8 @@ async function getAIConfig() {
   return {
     baseUrl: row?.base_url || process.env.AI_PROVIDER_URL || 'https://api.openai.com/v1',
     // Admin-set key wins; otherwise env var. Never sent to the client.
-    apiKey: row?.api_key || process.env.AI_API_KEY || '',
+    // DB keys are stored encrypted (see crypto.js) and decrypted here.
+    apiKey: decryptSecret(row?.api_key || '') || process.env.AI_API_KEY || '',
     model: row?.model || process.env.AI_MODEL || 'gpt-4o-mini',
   };
 }
@@ -253,9 +255,11 @@ router.get('/config', requirePermission('ai_config'), async (req, res) => {
 // PUT /api/ai/config { baseUrl, apiKey, model } — admin
 router.put('/config', requirePermission('ai_config'), async (req, res) => {
   const { baseUrl, apiKey, model } = req.body || {};
+  // The provider key is encrypted before it touches the database.
+  const storedKey = apiKey ? encryptSecret(apiKey) : null;
   await run(
     'UPDATE ai_config SET base_url = COALESCE(?, base_url), api_key = COALESCE(?, api_key), model = COALESCE(?, model), updated_at = datetime(\'now\') WHERE id = 1',
-    [baseUrl || null, apiKey || null, model || null]
+    [baseUrl || null, storedKey, model || null]
   );
   await audit({
     actorId: req.user.sub, actorName: req.user.name, role: req.user.role,

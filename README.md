@@ -76,8 +76,9 @@ One Vercel project, two services (see `vercel.json`): the `app` service is the V
 
 1. In [Vercel](https://vercel.com/new) → **Import** the `Clinix-ai` repo (Hobby plan, no card).
 2. Create the database manually at [turso.tech](https://turso.tech): Databases → Create Database, name it `clinix-ai`, region Mumbai (aws-ap-south-1). Open it, copy the URL, create a token and copy that too — then set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the Vercel project's env vars. Don't use Vercel's one-click Turso integration: it provisions the database inside Vercel's own Turso organization, where it is invisible in your dashboard and its credentials are sealed — the same failure hit NexusLMS and NexusCRM.
-3. Add one more env var: `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`). The demo works without it, but sessions would share a public fallback secret, so don't skip this.
-4. Deploy. The first visit seeds the demo users/patients automatically (same logins as above).
+3. Add one more env var: `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`). The demo works without it, but sessions would share a public fallback secret, so don't skip this. The server refuses to start in production without it.
+4. Trial/demo deployment only: set `SEED_DEMO_DATA=true` so the first visit seeds the demo users/patients (same logins as above). A deployment for a real client leaves this unset — it starts empty, with no demo accounts.
+5. Deploy.
 
 Notes for a client demo: cold starts add a few seconds on the first request after idle, and the AI features stay off until an admin adds a provider key in Settings → AI. Local dev still works offline — with no Turso vars set, the server uses a local SQLite file (`server/data/clinix.db`).
 
@@ -99,11 +100,12 @@ Notes for a client demo: cold starts add a few seconds on the first request afte
 
 ## Production hardening checklist
 
-- [ ] PostgreSQL instead of SQLite; encrypted backups
-- [ ] `JWT_SECRET` from a secrets manager; short token TTL + refresh rotation
-- [ ] Encrypt the AI provider key at rest (KMS/vault)
-- [ ] HTTPS everywhere (TLS termination), HSTS
-- [ ] Rate limiting + request validation hardening
+- [x] Turso (libSQL) instead of a local SQLite file; demo seeding gated behind `SEED_DEMO_DATA` so real-client deployments start empty
+- [x] `JWT_SECRET` required in production — the server refuses to start without it (fail-closed, no public fallback)
+- [x] AI provider key encrypted at rest (AES-256-GCM; key from `ENCRYPTION_KEY` or derived from `JWT_SECRET`)
+- [x] Rate limiting on sign-in (10 / 15 min) and the API (300 / 15 min)
+- [ ] Short token TTL + refresh rotation; session timeout + automatic logout
 - [ ] Field-level encryption for PHI at rest
-- [ ] Session timeout + automatic logout
+- [ ] Encrypted backups (Turso PITR / export)
+- [ ] HTTPS everywhere (TLS termination), HSTS — provided by Vercel by default
 - [ ] HIPAA / local healthcare compliance review
