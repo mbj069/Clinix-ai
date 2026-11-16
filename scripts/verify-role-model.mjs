@@ -156,6 +156,18 @@ const chenPats2 = await call(chen.token, '/patients');
 ok('Chen now sees p-1003 as her patient', chenPats2.patients?.length === 1 && chenPats2.patients[0].id === 'p-1003', `got ${JSON.stringify(chenPats2.patients?.map((p) => p.id))}`);
 const chenCons2 = await call(chen.token, '/patients/p-1003/consultations', 'POST', { diagnosis: 'Migraine — stable', plan: 'Continue as needed.' });
 ok('Chen can now consult p-1003 (201)', chenCons2.status === 201, `status ${chenCons2.status}`);
+// A cancelled appointment is not a link: book p-1002 with Chen, cancel
+// it, and she must lose p-1002 — while p-1003 stays hers via the real
+// consultation she gave.
+const bookedChen2 = await call(recep.token, '/appointments', 'POST', { patientId: 'p-1002', doctorId: 'u-doc-2', date: today, time: '17:00', reason: 'Asthma review with Dr. Chen' });
+ok('reception books p-1002 with Chen (201)', bookedChen2.status === 201, `status ${bookedChen2.status}`);
+const chenPats3 = await call(chen.token, '/patients');
+ok('Chen sees p-1002 while the booking stands', chenPats3.patients?.some((p) => p.id === 'p-1002'), `got ${JSON.stringify(chenPats3.patients?.map((p) => p.id))}`);
+const cancelChen2 = await call(recep.token, `/appointments/${bookedChen2.appointment?.id}`, 'PATCH', { status: 'cancelled' });
+ok('reception cancels Chen’s p-1002 booking (200)', cancelChen2.status === 200, `status ${cancelChen2.status}`);
+const chenPats4 = await call(chen.token, '/patients');
+ok('Chen loses p-1002 after cancellation, keeps p-1003 (consultation)',
+  chenPats4.patients?.length === 1 && chenPats4.patients[0].id === 'p-1003', `got ${JSON.stringify(chenPats4.patients?.map((p) => p.id))}`);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -52,8 +52,10 @@ export function filterPatientFor(role, patient) {
 }
 
 /** The link that makes a patient a doctor's: an appointment, a
- *  consultation, a prescription or a lab order with that doctor. */
-const OWN_PATIENT_SQL = `EXISTS (SELECT 1 FROM appointments WHERE patient_id = patients.id AND doctor_id = ?)
+ *  consultation, a prescription or a lab order with that doctor.
+ *  A cancelled / no-show appointment is not a link — the visit never
+ *  happened, so the patient never became the doctor's. */
+const OWN_PATIENT_SQL = `EXISTS (SELECT 1 FROM appointments WHERE patient_id = patients.id AND doctor_id = ? AND status NOT IN ('cancelled', 'no_show'))
      OR EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND doctor_id = ?)
      OR EXISTS (SELECT 1 FROM prescriptions WHERE patient_id = patients.id AND doctor_id = ?)
      OR EXISTS (SELECT 1 FROM lab_orders WHERE patient_id = patients.id AND doctor_id = ?)`;

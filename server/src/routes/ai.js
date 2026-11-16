@@ -145,7 +145,7 @@ async function runSearch(role, userId, query) {
     role === 'doctor'
       ? await queryAll(
           `SELECT * FROM patients WHERE
-             EXISTS (SELECT 1 FROM appointments WHERE patient_id = patients.id AND doctor_id = ?)
+             EXISTS (SELECT 1 FROM appointments WHERE patient_id = patients.id AND doctor_id = ? AND status NOT IN ('cancelled', 'no_show'))
              OR EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND doctor_id = ?)
              OR EXISTS (SELECT 1 FROM prescriptions WHERE patient_id = patients.id AND doctor_id = ?)
              OR EXISTS (SELECT 1 FROM lab_orders WHERE patient_id = patients.id AND doctor_id = ?)
