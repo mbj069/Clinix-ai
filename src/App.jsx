@@ -1,4 +1,5 @@
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Routes, Route, Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { NEXUS_TECH_LOGO } from './assets/nexusTechLogo';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -6,6 +7,12 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import PatientList from './components/PatientList';
 import PatientDetail from './components/PatientDetail';
+import PatientForm from './components/PatientForm';
+import Appointments from './components/Appointments';
+import Reception from './components/Reception';
+import Doctor from './components/Doctor';
+import Nursing from './components/Nursing';
+import Admin from './components/Admin';
 import AuditLog from './components/AuditLog';
 import AISearch from './components/AISearch';
 import AIScribe from './components/AIScribe';
@@ -14,31 +21,59 @@ import AISettings from './components/AISettings';
 function Shell({ children }) {
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
+  const [navOpen, setNavOpen] = useState(false);
 
   const signOut = () => {
     logout();
     navigate('/login');
   };
+  const closeNav = () => setNavOpen(false);
+
+  const links = [
+    { to: '/', label: 'Dashboard', show: true },
+    { to: '/patients', label: 'Patients', show: true },
+    { to: '/appointments', label: 'Appointments', show: can('schedule') },
+    { to: '/reception', label: 'Reception', show: can('schedule') },
+    { to: '/doctor', label: 'Doctor', show: can('consult') },
+    { to: '/nursing', label: 'Nursing', show: can('edit_vitals') },
+    { to: '/admin', label: 'Admin', show: can('manage_users') },
+    { to: '/audit', label: 'Audit log', show: can('view_audit_log') },
+    { to: '/ai-search', label: 'AI search', show: true },
+    { to: '/scribe', label: 'AI scribe', show: can('edit_patients') },
+    { to: '/settings/ai', label: 'AI settings', show: can('ai_config') },
+  ].filter((l) => l.show);
 
   return (
     <div className="app">
-      <header className="topbar">
+      <header className="mobile-topbar">
+        <button className="hamburger" onClick={() => setNavOpen(true)} aria-label="Open menu">☰</button>
         <Link to="/" className="logo"><img className="brand-logo sm" src={NEXUS_TECH_LOGO} alt="Nexus-Tech Solutions" /> Clinix AI</Link>
+        <span className="mobile-user">{user.name}</span>
+      </header>
+
+      {navOpen && <div className="nav-overlay" onClick={closeNav} />}
+
+      <aside className={`sidebar ${navOpen ? 'open' : ''}`}>
+        <Link to="/" className="logo" onClick={closeNav}>
+          <img className="brand-logo sm" src={NEXUS_TECH_LOGO} alt="Nexus-Tech Solutions" /> Clinix AI
+        </Link>
         <nav>
-          <Link to="/">Dashboard</Link>
-          <Link to="/patients">Patients</Link>
-          <Link to="/ai-search">AI search</Link>
-          {can('edit_patients') && <Link to="/scribe">AI scribe</Link>}
-          {can('view_audit_log') && <Link to="/audit">Audit log</Link>}
-          {can('manage_users') && <Link to="/settings/ai">AI settings</Link>}
+          {links.map((l) => (
+            <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={closeNav}>
+              {l.label}
+            </NavLink>
+          ))}
         </nav>
-        <div className="userbox">
+        <div className="sidebar-user">
           <span>{user.name} <span className="role-badge">{user.role}</span></span>
           <button className="btn small" onClick={signOut}>Sign out</button>
         </div>
-      </header>
-      <main className="main">{children}</main>
-      <footer className="footer">Clinix AI prototype by Nexus-Tech Solutions — synthetic demo data only.</footer>
+      </aside>
+
+      <div className="content">
+        <main className="main">{children}</main>
+        <footer className="footer">Clinix AI by Nexus-Tech Solutions — synthetic demo data only.</footer>
+      </div>
     </div>
   );
 }
@@ -66,22 +101,37 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/patients" element={<PatientList />} />
+                <Route path="/patients/new" element={
+                  <ProtectedRoute permission="add_patients"><PatientForm /></ProtectedRoute>
+                } />
+                <Route path="/patients/:id/edit" element={
+                  <ProtectedRoute permission="edit_patients"><PatientForm /></ProtectedRoute>
+                } />
                 <Route path="/patients/:id" element={<PatientDetail />} />
+                <Route path="/appointments" element={
+                  <ProtectedRoute permission="schedule"><Appointments /></ProtectedRoute>
+                } />
+                <Route path="/reception" element={
+                  <ProtectedRoute permission="schedule"><Reception /></ProtectedRoute>
+                } />
+                <Route path="/doctor" element={
+                  <ProtectedRoute permission="consult"><Doctor /></ProtectedRoute>
+                } />
+                <Route path="/nursing" element={
+                  <ProtectedRoute permission="edit_vitals"><Nursing /></ProtectedRoute>
+                } />
+                <Route path="/admin" element={
+                  <ProtectedRoute permission="manage_users"><Admin /></ProtectedRoute>
+                } />
                 <Route path="/audit" element={
-                  <ProtectedRoute permission="view_audit_log">
-                    <AuditLog />
-                  </ProtectedRoute>
+                  <ProtectedRoute permission="view_audit_log"><AuditLog /></ProtectedRoute>
                 } />
                 <Route path="/ai-search" element={<AISearch />} />
                 <Route path="/scribe" element={
-                  <ProtectedRoute permission="edit_patients">
-                    <AIScribe />
-                  </ProtectedRoute>
+                  <ProtectedRoute permission="edit_patients"><AIScribe /></ProtectedRoute>
                 } />
                 <Route path="/settings/ai" element={
-                  <ProtectedRoute permission="manage_users">
-                    <AISettings />
-                  </ProtectedRoute>
+                  <ProtectedRoute permission="ai_config"><AISettings /></ProtectedRoute>
                 } />
               </Routes>
             </Shell>
