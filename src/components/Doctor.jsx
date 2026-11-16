@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
+import { DAYS } from '../utils/schedule';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -10,6 +11,7 @@ export default function Doctor() {
   const [patients, setPatients] = useState([]);
   const [selected, setSelected] = useState('');
   const [myAppts, setMyAppts] = useState([]);
+  const [myHours, setMyHours] = useState([]);
   const [history, setHistory] = useState({ consultations: [], prescriptions: [], labOrders: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,6 +25,9 @@ export default function Doctor() {
       .then((d) => setMyAppts(d.appointments))
       .catch(() => {})
       .finally(() => setLoading(false));
+    api('/schedules')
+      .then((d) => setMyHours((d.schedules || []).filter((s) => s.doctorId === user.id)))
+      .catch(() => {});
   }, [user.id]);
 
   const loadHistory = (patientId) => {
@@ -78,6 +83,15 @@ export default function Doctor() {
       <h2>Doctor panel</h2>
       <p className="muted">Your clinic day — consultations, prescriptions and lab orders.</p>
       {error && <div className="error">{error}</div>}
+
+      {myHours.length > 0 && (
+        <section className="panel">
+          <h3>My sitting hours this week</h3>
+          <p className="muted">
+            {myHours.map((s) => `${DAYS[s.dayOfWeek]} ${s.startTime}–${s.endTime}`).join(' · ')}
+          </p>
+        </section>
+      )}
 
       <h3>My appointments today</h3>
       {loading ? <p className="muted">Loading…</p> : myAppts.length === 0 ? (

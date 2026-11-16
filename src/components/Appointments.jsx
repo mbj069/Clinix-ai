@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../utils/api';
+import { isWithinHours, DAYS } from '../utils/schedule';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -10,6 +11,7 @@ export default function Appointments() {
   const [list, setList] = useState([]);
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ patientId: '', doctorId: '', date: today(), time: '09:00', reason: '' });
@@ -30,6 +32,7 @@ export default function Appointments() {
   useEffect(() => {
     api('/patients').then((d) => setPatients(d.patients)).catch(() => {});
     api('/users/doctors').then((d) => setDoctors(d.doctors)).catch(() => {});
+    api('/schedules').then((d) => setSchedules(d.schedules)).catch(() => {});
   }, []);
 
   const setStatusOf = async (appt, next) => {
@@ -53,6 +56,12 @@ export default function Appointments() {
       setError(err.message);
     }
   };
+
+  const bookingDay = form.date ? new Date(`${form.date}T12:00:00`).getDay() : null;
+  const bookingDoctor = doctors.find((d) => d.id === form.doctorId);
+  const hoursCheck = form.doctorId && form.date
+    ? isWithinHours(schedules, form.doctorId, bookingDay, form.time)
+    : null;
 
   return (
     <div>
@@ -85,6 +94,13 @@ export default function Appointments() {
           <label>Reason for visit
             <input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. Diabetes follow-up" />
           </label>
+          {hoursCheck && bookingDoctor && (
+            <p className="muted">
+              {hoursCheck.schedule
+                ? `${bookingDoctor.name} sits ${hoursCheck.schedule.startTime}–${hoursCheck.schedule.endTime} on ${DAYS[bookingDay]} — ${hoursCheck.within ? '✓ this slot is inside sitting hours.' : '⚠ this slot is outside sitting hours.'}`
+                : `${bookingDoctor.name} has no sitting hours set for ${DAYS[bookingDay]}.`}
+            </p>
+          )}
           <button type="submit" className="btn primary">Book appointment</button>
         </form>
       </section>

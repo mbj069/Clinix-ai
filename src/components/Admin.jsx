@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
+import { DAYS } from '../utils/schedule';
 
 const ROLES = ['admin', 'doctor', 'nurse', 'receptionist'];
 
@@ -9,12 +10,17 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ username: '', password: '', name: '', role: 'nurse' });
+  const [doctors, setDoctors] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [schedForm, setSchedForm] = useState({ doctorId: '', dayOfWeek: '1', startTime: '09:00', endTime: '13:00' });
 
   useEffect(() => {
-    Promise.all([api('/users'), api('/patients')])
-      .then(([u, p]) => {
+    Promise.all([api('/users'), api('/patients'), api('/users/doctors'), api('/schedules')])
+      .then(([u, p, d, s]) => {
         setUsers(u.users);
         setPatientCount(p.patients.length);
+        setDoctors(d.doctors);
+        setSchedules(s.schedules);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -36,6 +42,29 @@ export default function Admin() {
     try {
       const { user } = await api(`/users/${u.id}`, { method: 'PATCH', body: { active: !u.active } });
       setUsers((list) => list.map((x) => (x.id === u.id ? user : x)));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const saveSchedule = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const { schedules: updated } = await api('/schedules', {
+        method: 'POST',
+        body: { ...schedForm, dayOfWeek: Number(schedForm.dayOfWeek) },
+      });
+      setSchedules(updated);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const removeSchedule = async (s) => {
+    try {
+      await api(`/schedules/${s.id}`, { method: 'DELETE' });
+      setSchedules((list) => list.filter((x) => x.id !== s.id));
     } catch (err) {
       alert(err.message);
     }
@@ -114,6 +143,50 @@ export default function Admin() {
           </table>
         </div>
       )}
+
+      <section className="panel">
+        <h3>Doctor sitting hours</h3>
+        <p className="muted">Set each doctor's weekly hours. The dashboard and reception show who's sitting when, and booking warns about slots outside sitting hours.</p>
+        <form onSubmit={saveSchedule}>
+          <div className="form-grid">
+            <label>Doctor
+              <select value={schedForm.doctorId} onChange={(e) => setSchedForm({ ...schedForm, doctorId: e.target.value })} required>
+                <option value="">Select doctor…</option>
+                {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+            <label>Day
+              <select value={schedForm.dayOfWeek} onChange={(e) => setSchedForm({ ...schedForm, dayOfWeek: e.target.value })}>
+                {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+              </select>
+            </label>
+            <label>Starts
+              <input type="time" value={schedForm.startTime} onChange={(e) => setSchedForm({ ...schedForm, startTime: e.target.value })} required />
+            </label>
+            <label>Ends
+              <input type="time" value={schedForm.endTime} onChange={(e) => setSchedForm({ ...schedForm, endTime: e.target.value })} required />
+            </label>
+          </div>
+          <button type="submit" className="btn primary">Save sitting hours</button>
+        </form>
+        {schedules.length === 0 ? <p className="muted">No sitting hours set yet.</p> : (
+          <div className="table-wrap" style={{ marginTop: 16 }}>
+            <table>
+              <thead><tr><th>Doctor</th><th>Day</th><th>Hours</th><th></th></tr></thead>
+              <tbody>
+                {schedules.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.doctorName}</td>
+                    <td>{DAYS[s.dayOfWeek]}</td>
+                    <td>{s.startTime} – {s.endTime}</td>
+                    <td><button className="btn small danger" onClick={() => removeSchedule(s)}>Remove</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
