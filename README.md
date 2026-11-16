@@ -17,15 +17,13 @@ clinix-ai/
 │   └── utils/api.js      # API client
 └── server/               # Express backend (Node 20+)
     └── src/
-        ├── index.js      # app entry (local dev)
+        ├── index.js      # app entry (local dev + Vercel server service)
         ├── app.js        # Express app (shared by local + Vercel)
         ├── db.js         # libSQL/Turso client + schema
         ├── seed.js       # demo users + patients
         ├── audit.js      # append-only audit writer
         ├── middleware/   # JWT auth, RBAC
         └── routes/       # auth, patients, audit, ai
-└── api/
-    └── index.js          # Vercel serverless entry (the Express app)
 ```
 
 ## Features
@@ -72,16 +70,16 @@ npm run dev                 # http://localhost:5173 (proxies /api to :3001)
 
 To enable AI features, set `AI_API_KEY` in `server/.env` (or configure it in the app as admin via Settings → AI).
 
-## Deploying (Vercel + Turso, free)
+## Deploying (Vercel services + Turso, free)
 
-The frontend is static; the Express API runs as a Vercel serverless function backed by a Turso database (libSQL over HTTP). No credit card needed on either free tier.
+One Vercel project, two services (see `vercel.json`): the `app` service is the Vite frontend, the `server` service is the Express API, backed by a Turso database (libSQL over HTTP). One domain, shared env vars. No credit card needed on either free tier.
 
-1. In [Vercel](https://vercel.com/new) → **Import** the `Clinix-ai` repo (Hobby plan, no card). The framework is auto-detected as Vite.
+1. In [Vercel](https://vercel.com/new) → **Import** the `Clinix-ai` repo (Hobby plan, no card).
 2. Create the database manually at [turso.tech](https://turso.tech): Databases → Create Database, name it `clinix-ai`, region Mumbai (aws-ap-south-1). Open it, copy the URL, create a token and copy that too — then set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the Vercel project's env vars. Don't use Vercel's one-click Turso integration: it provisions the database inside Vercel's own Turso organization, where it is invisible in your dashboard and its credentials are sealed — the same failure hit NexusLMS and NexusCRM.
 3. Add one more env var: `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`). The demo works without it, but sessions would share a public fallback secret, so don't skip this.
 4. Deploy. The first visit seeds the demo users/patients automatically (same logins as above).
 
-Notes for a client demo: serverless cold starts add a few seconds on the first request after idle, and the AI features stay off until an admin adds a provider key in Settings → AI. Local dev still works offline — with no Turso vars set, the server uses a local SQLite file (`server/data/clinix.db`).
+Notes for a client demo: cold starts add a few seconds on the first request after idle, and the AI features stay off until an admin adds a provider key in Settings → AI. Local dev still works offline — with no Turso vars set, the server uses a local SQLite file (`server/data/clinix.db`).
 
 ## API reference
 

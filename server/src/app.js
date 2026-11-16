@@ -1,5 +1,5 @@
 // Clinix AI Express app — shared by the local server (server/src/index.js)
-// and the Vercel serverless function (api/index.js). No listen() here.
+// and the Vercel server service. No listen() here.
 
 import express from 'express';
 import cors from 'cors';

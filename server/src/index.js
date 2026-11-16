@@ -1,6 +1,6 @@
 // Clinix AI backend — local entry.
 // Run: npm run seed (first time), then npm run dev
-// On Vercel this file is not used — see api/index.js.
+// On Vercel this file is the server service entrypoint (see vercel.json).
 
 import 'dotenv/config';
 import app from './app.js';
