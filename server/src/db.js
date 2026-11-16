@@ -186,8 +186,19 @@ export async function initSchema() {
       created_by_name TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE INDEX IF NOT EXISTS idx_tasks_patient ON nursing_tasks(patient_id);
-    CREATE INDEX IF NOT EXISTS idx_tasks_status ON nursing_tasks(status);
+    -- Doctor weekly sitting hours (0 = Sunday … 6 = Saturday).
+    -- One row per doctor per weekday; admin sets them, reception and the
+    -- dashboard read them. Times are HH:MM in the hospital's local time.
+    CREATE TABLE IF NOT EXISTS doctor_schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doctor_id TEXT NOT NULL,
+      day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(doctor_id, day_of_week)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sched_doctor ON doctor_schedules(doctor_id);
   `);
   // INSERT OR IGNORE can't be in the same executeMultiple reliably across drivers — separate step.
   await client.execute('INSERT OR IGNORE INTO ai_config (id) VALUES (1)');
@@ -291,5 +302,13 @@ export function mapTask(row) {
     task: row.task, due: row.due, status: row.status,
     createdBy: row.created_by, createdByName: row.created_by_name,
     createdAt: row.created_at,
+  };
+}
+
+export function mapSchedule(row) {
+  if (!row) return null;
+  return {
+    id: row.id, doctorId: row.doctor_id, doctorName: row.doctor_name || '',
+    dayOfWeek: row.day_of_week, startTime: row.start_time, endTime: row.end_time,
   };
 }

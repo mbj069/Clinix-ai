@@ -14,6 +14,8 @@ import clinicalRoutes from './routes/clinical.js';
 import vitalsRoutes from './routes/vitals.js';
 import taskRoutes from './routes/tasks.js';
 import userRoutes from './routes/users.js';
+import scheduleRoutes from './routes/schedules.js';
+import statsRoutes from './routes/stats.js';
 import auditRoutes from './routes/audit.js';
 import aiRoutes from './routes/ai.js';
 
@@ -52,6 +54,8 @@ app.use('/api', clinicalRoutes);
 app.use('/api', vitalsRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/schedules', scheduleRoutes);
+app.use('/api/stats', statsRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', aiRoutes);
 

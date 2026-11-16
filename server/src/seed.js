@@ -11,6 +11,7 @@ import { run } from './db.js';
 const USERS = [
   { id: 'u-admin-1', username: 'admin', password: 'admin123', name: 'Ava Admin', role: 'admin' },
   { id: 'u-doc-1', username: 'doctor', password: 'doctor123', name: 'Dr. Daniel Reed', role: 'doctor' },
+  { id: 'u-doc-2', username: 'doctor2', password: 'doctor123', name: 'Dr. Sarah Chen', role: 'doctor' },
   { id: 'u-nurse-1', username: 'nurse', password: 'nurse123', name: 'Nina Cole, RN', role: 'nurse' },
   { id: 'u-recep-1', username: 'reception', password: 'reception123', name: 'Ravi Patel', role: 'receptionist' },
 ];
@@ -109,6 +110,19 @@ const NURSING_TASKS = [
   { id: 4, patient_id: 'p-1005', task: 'Discharge paperwork and follow-up booking', due: 'Yesterday', status: 'done' },
 ];
 
+// Weekly sitting hours (day: 0 = Sunday … 6 = Saturday).
+// Dr. Reed — weekday mornings; Dr. Chen — Mon/Wed/Fri afternoons.
+const SCHEDULES = [
+  { id: 1, doctor_id: 'u-doc-1', day: 1, start: '09:00', end: '13:00' },
+  { id: 2, doctor_id: 'u-doc-1', day: 2, start: '09:00', end: '13:00' },
+  { id: 3, doctor_id: 'u-doc-1', day: 3, start: '09:00', end: '13:00' },
+  { id: 4, doctor_id: 'u-doc-1', day: 4, start: '09:00', end: '13:00' },
+  { id: 5, doctor_id: 'u-doc-1', day: 5, start: '09:00', end: '13:00' },
+  { id: 6, doctor_id: 'u-doc-2', day: 1, start: '14:00', end: '18:00' },
+  { id: 7, doctor_id: 'u-doc-2', day: 3, start: '14:00', end: '18:00' },
+  { id: 8, doctor_id: 'u-doc-2', day: 5, start: '14:00', end: '18:00' },
+];
+
 export async function seedDatabase() {
   for (const u of USERS) {
     await run(
@@ -195,7 +209,18 @@ export async function seedClinical() {
       [t.id, t.patient_id, t.task, t.due, t.status]
     );
   }
-  console.log('clinical seed: consultations, prescriptions, lab orders, vitals, tasks');
+
+  // Sitting hours only for doctors that exist — on the live trial DB the
+  // second demo doctor may not exist yet (created later via the Admin panel
+  // or API), and an orphan schedule row would render with no name.
+  for (const s of SCHEDULES) {
+    await run(
+      `INSERT OR IGNORE INTO doctor_schedules (id, doctor_id, day_of_week, start_time, end_time)
+       SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`,
+      [s.id, s.doctor_id, s.day, s.start, s.end, s.doctor_id]
+    );
+  }
+  console.log('clinical seed: consultations, prescriptions, lab orders, vitals, tasks, schedules');
 }
 
 // Run directly: `npm run seed`. Imported: the caller decides when to seed.
