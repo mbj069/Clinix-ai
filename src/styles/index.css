@@ -100,6 +100,12 @@ body {
 
 /* ---------- responsive shell ---------- */
 @media (max-width: 900px) {
+  /* The shell is a horizontal flex row on desktop (sidebar + content).
+     On mobile it MUST stack vertically — otherwise the topbar becomes a
+     column in the row: it stretches to the full page height, its
+     align-items:center puts the hamburger in the middle of the page, and
+     its width pushes all content to the right, off-screen. */
+  .app { flex-direction: column; }
   .mobile-topbar { display: flex; }
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0;
