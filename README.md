@@ -77,7 +77,7 @@ To enable AI features, set `AI_API_KEY` in `server/.env` (or configure it in the
 The frontend is static; the Express API runs as a Vercel serverless function backed by a Turso database (libSQL over HTTP). No credit card needed on either free tier.
 
 1. In [Vercel](https://vercel.com/new) → **Import** the `Clinix-ai` repo (Hobby plan, no card). The framework is auto-detected as Vite.
-2. Add the Turso integration: project → **Storage → Turso → Add** — it provisions a database and injects `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` automatically. (Or create a database at [turso.tech](https://turso.tech) and set those two vars manually.)
+2. Create the database manually at [turso.tech](https://turso.tech): Databases → Create Database, name it `clinix-ai`, region Mumbai (aws-ap-south-1). Open it, copy the URL, create a token and copy that too — then set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the Vercel project's env vars. Don't use Vercel's one-click Turso integration: it provisions the database inside Vercel's own Turso organization, where it is invisible in your dashboard and its credentials are sealed — the same failure hit NexusLMS and NexusCRM.
 3. Add one more env var: `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`). The demo works without it, but sessions would share a public fallback secret, so don't skip this.
 4. Deploy. The first visit seeds the demo users/patients automatically (same logins as above).
 
