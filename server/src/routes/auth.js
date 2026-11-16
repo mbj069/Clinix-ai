@@ -15,6 +15,9 @@ router.post('/login', async (req, res) => {
   if (!row || !bcrypt.compareSync(password, row.password_hash)) {
     return res.status(401).json({ error: 'Invalid username or password.' });
   }
+  if (row.active === 0) {
+    return res.status(403).json({ error: 'This account has been deactivated. Contact an administrator.' });
+  }
   const user = mapUser(row);
   await audit({ actorId: user.id, actorName: user.name, role: user.role, action: 'LOGIN', details: 'User signed in' });
   res.json({ token: signToken(user), user });

@@ -9,6 +9,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import authRoutes from './routes/auth.js';
 import patientRoutes from './routes/patients.js';
+import appointmentRoutes from './routes/appointments.js';
+import clinicalRoutes from './routes/clinical.js';
+import vitalsRoutes from './routes/vitals.js';
+import taskRoutes from './routes/tasks.js';
+import userRoutes from './routes/users.js';
 import auditRoutes from './routes/audit.js';
 import aiRoutes from './routes/ai.js';
 
@@ -42,6 +47,11 @@ app.get('/api/health', (req, res) => res.json({ ok: true, service: 'clinix-ai-se
 app.use('/api/auth', loginLimiter, authRoutes);
 app.use('/api', apiLimiter);
 app.use('/api/patients', patientRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api', clinicalRoutes);
+app.use('/api', vitalsRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', aiRoutes);
 
