@@ -38,14 +38,12 @@ body {
 .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .brand h1 { margin: 0; font-size: 24px; }
 .brand p { margin: 0; color: var(--muted); font-size: 13px; }
-.brand-mark {
-  width: 44px; height: 44px;
-  background: var(--brand); color: #fff;
-  border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 20px;
+.brand-logo {
+  width: 52px; height: 52px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
-.brand-mark.sm { width: 30px; height: 30px; font-size: 15px; border-radius: 8px; }
+.brand-logo.sm { width: 30px; height: 30px; }
 
 /* ---------- layout ---------- */
 .app { min-height: 100vh; display: flex; flex-direction: column; }

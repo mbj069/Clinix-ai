@@ -36,7 +36,7 @@ export default function Login() {
     <div className="login-wrap">
       <div className="login-card">
         <div className="brand">
-          <div className="brand-mark">C+</div>
+          <img className="brand-logo" src="/nexus-tech-logo.webp" alt="Nexus-Tech Solutions" />
           <div>
             <h1>Clinix AI</h1>
             <p>by Nexus-Tech Solutions</p>
