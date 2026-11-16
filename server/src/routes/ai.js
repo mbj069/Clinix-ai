@@ -9,7 +9,7 @@
 import { Router } from 'express';
 import { queryOne, queryAll, run, mapPatient } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { requirePermission, can, filterPatientFor } from '../middleware/rbac.js';
+import { requirePermission, can, filterPatientFor, isOwnPatient } from '../middleware/rbac.js';
 import { audit } from '../audit.js';
 import { encryptSecret, decryptSecret } from '../crypto.js';
 
@@ -138,9 +138,21 @@ const SEARCH_TOOL = {
   },
 };
 
-async function runSearch(role, query) {
+async function runSearch(role, userId, query) {
   const q = query.toLowerCase();
-  const rows = await queryAll('SELECT * FROM patients ORDER BY name');
+  // Doctors only ever search their own patients.
+  const rows =
+    role === 'doctor'
+      ? await queryAll(
+          `SELECT * FROM patients WHERE
+             EXISTS (SELECT 1 FROM appointments WHERE patient_id = patients.id AND doctor_id = ?)
+             OR EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND doctor_id = ?)
+             OR EXISTS (SELECT 1 FROM prescriptions WHERE patient_id = patients.id AND doctor_id = ?)
+             OR EXISTS (SELECT 1 FROM lab_orders WHERE patient_id = patients.id AND doctor_id = ?)
+           ORDER BY name`,
+          [userId, userId, userId, userId]
+        )
+      : await queryAll('SELECT * FROM patients ORDER BY name');
   return rows
     .map(mapPatient)
     .filter(
@@ -159,9 +171,12 @@ const aiError = (res, e) => {
 
 // --- Endpoints ----------------------------------------------------------------
 
-// POST /api/ai/summary { patientId }
+// POST /api/ai/summary { patientId } — doctors only for their own patients
 router.post('/summary', requirePermission('view_sensitive'), async (req, res) => {
   try {
+    if (req.user.role === 'doctor' && !(await isOwnPatient(req.user.sub, req.body?.patientId))) {
+      return res.status(403).json({ error: 'This patient is not assigned to you.' });
+    }
     const patient = await getFilteredPatient(req.user.role, req.body?.patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found.' });
     const { message, usage } = await providerChat({
@@ -181,11 +196,14 @@ router.post('/summary', requirePermission('view_sensitive'), async (req, res) =>
   }
 });
 
-// POST /api/ai/scribe { patientId, roughNotes }
+// POST /api/ai/scribe { patientId, roughNotes } — doctors only for their own patients
 router.post('/scribe', requirePermission('edit_patients'), async (req, res) => {
   try {
     const { patientId, roughNotes } = req.body || {};
     if (!roughNotes?.trim()) return res.status(400).json({ error: 'Rough notes are required.' });
+    if (req.user.role === 'doctor' && !(await isOwnPatient(req.user.sub, patientId))) {
+      return res.status(403).json({ error: 'This patient is not assigned to you.' });
+    }
     const patient = await getFilteredPatient(req.user.role, patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found.' });
     const { message, usage } = await providerChat({
@@ -206,8 +224,9 @@ router.post('/scribe', requirePermission('edit_patients'), async (req, res) => {
   }
 });
 
-// POST /api/ai/search { question } — agentic tool loop, RBAC-filtered
-router.post('/search', async (req, res) => {
+// POST /api/ai/search { question } — agentic tool loop, RBAC-filtered.
+// Reception has no clinical access, so no AI search either.
+router.post('/search', requirePermission('ai_search'), async (req, res) => {
   try {
     const { question } = req.body || {};
     if (!question?.trim()) return res.status(400).json({ error: 'A question is required.' });
@@ -226,7 +245,7 @@ router.post('/search', async (req, res) => {
         let result;
         if (tc.function.name === 'search_patients') {
           const args = JSON.parse(tc.function.arguments || '{}');
-          result = await runSearch(req.user.role, args.query || '');
+          result = await runSearch(req.user.role, req.user.sub, args.query || '');
         } else {
           result = { error: `Unknown tool: ${tc.function.name}` };
         }

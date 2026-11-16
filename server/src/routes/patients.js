@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { queryOne, queryAll, run, mapPatient } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { requirePermission, can, filterPatientFor } from '../middleware/rbac.js';
+import { requirePermission, requireOwnPatient, ownPatientsWhere, can, filterPatientFor } from '../middleware/rbac.js';
 import { audit } from '../audit.js';
 
 const router = Router();
@@ -9,11 +9,18 @@ router.use(requireAuth);
 
 const mayViewFull = (role) => can(role, 'view_patients') || can(role, 'view_patients_basic');
 
-// GET /api/patients?q= — list, RBAC-filtered
+// GET /api/patients?q= — list, RBAC-filtered. Doctors see only their own
+// patients (linked by appointment / consultation / prescription / lab order).
 router.get('/', async (req, res) => {
   if (!mayViewFull(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
   const q = (req.query.q || '').toLowerCase();
-  const rows = await queryAll('SELECT * FROM patients ORDER BY name');
+  let rows;
+  if (req.user.role === 'doctor') {
+    const { sql, args } = ownPatientsWhere(req.user.sub);
+    rows = await queryAll(`SELECT * FROM patients WHERE ${sql} ORDER BY name`, args);
+  } else {
+    rows = await queryAll('SELECT * FROM patients ORDER BY name');
+  }
   let patients = rows.map(mapPatient);
   if (q) {
     patients = patients.filter(
@@ -26,8 +33,9 @@ router.get('/', async (req, res) => {
   res.json({ patients: patients.map((p) => filterPatientFor(req.user.role, p)) });
 });
 
-// GET /api/patients/:id — detail, RBAC-filtered + audited
-router.get('/:id', async (req, res) => {
+// GET /api/patients/:id — detail, RBAC-filtered + audited. Doctors are
+// blocked from patients who are not theirs.
+router.get('/:id', requireOwnPatient('id'), async (req, res) => {
   if (!mayViewFull(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
   const row = await queryOne('SELECT * FROM patients WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Patient not found.' });
@@ -67,23 +75,21 @@ router.post('/', requirePermission('add_patients'), async (req, res) => {
   res.status(201).json({ patient: filterPatientFor(req.user.role, patient) });
 });
 
-// PATCH /api/patients/:id — edit demographics (doctor, admin)
-router.patch('/:id', requirePermission('edit_patients'), async (req, res) => {
+// PATCH /api/patients/:id — edit demographics (reception, admin).
+// Clinical fields (allergies, conditions, medications, notes) are NOT
+// editable here — they change through consultations and clinical notes.
+router.patch('/:id', requirePermission('edit_demographics'), async (req, res) => {
   const row = await queryOne('SELECT * FROM patients WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Patient not found.' });
-  const { name, dob, gender, phone, bloodType, allergies, conditions, medications, notes, ssnLast4 } = req.body || {};
-  const list = (v, cur) => (v === undefined ? cur : JSON.stringify(Array.isArray(v) ? v : typeof v === 'string' ? v.split(',').map((s) => s.trim()).filter(Boolean) : []));
+  const { name, dob, gender, phone, bloodType, ssnLast4 } = req.body || {};
   await run(
     `UPDATE patients SET name = ?, dob = ?, gender = ?, phone = ?, blood_type = ?,
-       allergies = ?, conditions = ?, medications = ?, notes = ?, ssn_last4 = ?, updated_at = datetime('now')
+       ssn_last4 = ?, updated_at = datetime('now')
      WHERE id = ?`,
     [
       name?.trim() || row.name, dob || row.dob, gender || row.gender,
       phone?.trim() || row.phone, bloodType || row.blood_type,
-      list(allergies, row.allergies), list(conditions, row.conditions),
-      list(medications, row.medications),
-      notes === undefined ? row.notes : notes.trim(),
-      ssnLast4 === undefined ? row.ssn_last4 : String(ssnLast4).trim().slice(-4),
+      ssnLast4 === undefined || ssnLast4 === '' ? row.ssn_last4 : String(ssnLast4).trim().slice(-4),
       req.params.id,
     ]
   );
@@ -119,8 +125,9 @@ router.patch('/:id/vitals', requirePermission('edit_vitals'), async (req, res) =
   res.json({ patient: filterPatientFor(req.user.role, patient) });
 });
 
-// POST /api/patients/:id/notes — doctor, admin
-router.post('/:id/notes', requirePermission('edit_patients'), async (req, res) => {
+// POST /api/patients/:id/notes — clinical note (doctor, admin).
+// Doctors may only add notes for their own patients.
+router.post('/:id/notes', requirePermission('edit_patients'), requireOwnPatient('id'), async (req, res) => {
   const { note } = req.body || {};
   if (!note || !note.trim()) return res.status(400).json({ error: 'Note text is required.' });
   const row = await queryOne('SELECT * FROM patients WHERE id = ?', [req.params.id]);

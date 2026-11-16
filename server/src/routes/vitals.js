@@ -6,14 +6,17 @@
 import { Router } from 'express';
 import { queryOne, queryAll, run, mapVitals, mapPatient } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { requirePermission, can, filterPatientFor } from '../middleware/rbac.js';
+import { requirePermission, requireOwnPatient, can, filterPatientFor } from '../middleware/rbac.js';
 import { audit } from '../audit.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/patients/:id/vitals', async (req, res) => {
-  if (!can(req.user.role, 'view_patients') && !can(req.user.role, 'view_patients_basic')) {
+// Vitals history is clinical data — visible to clinical roles only
+// (admin, doctor, nurse), never to reception. Doctors see only their
+// own patients' vitals.
+router.get('/patients/:id/vitals', requireOwnPatient('id'), async (req, res) => {
+  if (!can(req.user.role, 'view_patients')) {
     return res.status(403).json({ error: 'Insufficient permissions.' });
   }
   const patient = await queryOne('SELECT id FROM patients WHERE id = ?', [req.params.id]);

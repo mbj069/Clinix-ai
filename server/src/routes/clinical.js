@@ -1,17 +1,32 @@
 // Clinical records — consultations, prescriptions, lab orders.
 // All patient-scoped: /api/patients/:id/consultations etc.
-// Doctors (and admins) write; anyone who can view patients can read.
+// Doctors (and admins) write; only clinical roles may read — reception
+// sees demographics only, never clinical history. Doctors may only read
+// or write their own patients.
 
 import { Router } from 'express';
 import { queryOne, queryAll, run, mapConsultation, mapPrescription, mapLabOrder } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { requirePermission, can } from '../middleware/rbac.js';
+import { requirePermission, requireOwnPatient, isOwnPatient, can } from '../middleware/rbac.js';
 import { audit } from '../audit.js';
 
 const router = Router();
 router.use(requireAuth);
 
-const mayView = (role) => can(role, 'view_patients') || can(role, 'view_patients_basic');
+// Clinical history is visible to clinical roles only (admin, doctor,
+// nurse) — never to reception.
+const mayViewClinical = (role) => can(role, 'view_patients');
+
+// A doctor changing the status of a prescription / lab order must own
+// that record's patient.
+function requireOwnRecord(table) {
+  return async (req, res, next) => {
+    if (req.user.role !== 'doctor') return next();
+    const row = await queryOne(`SELECT patient_id FROM ${table} WHERE id = ?`, [req.params.id]);
+    if (row && (await isOwnPatient(req.user.sub, row.patient_id))) return next();
+    return res.status(403).json({ error: 'This record belongs to another doctor’s patient.' });
+  };
+}
 
 async function patientOr404(req, res) {
   const row = await queryOne('SELECT * FROM patients WHERE id = ?', [req.params.id]);
@@ -24,8 +39,8 @@ async function patientOr404(req, res) {
 
 // --- Consultations ---------------------------------------------------------
 
-router.get('/patients/:id/consultations', async (req, res) => {
-  if (!mayView(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
+router.get('/patients/:id/consultations', requireOwnPatient('id'), async (req, res) => {
+  if (!mayViewClinical(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
   if (!(await patientOr404(req, res))) return;
   const rows = await queryAll(
     'SELECT * FROM consultations WHERE patient_id = ? ORDER BY date DESC, id DESC',
@@ -34,7 +49,7 @@ router.get('/patients/:id/consultations', async (req, res) => {
   res.json({ consultations: rows.map(mapConsultation) });
 });
 
-router.post('/patients/:id/consultations', requirePermission('consult'), async (req, res) => {
+router.post('/patients/:id/consultations', requirePermission('consult'), requireOwnPatient('id'), async (req, res) => {
   const { diagnosis, plan, date } = req.body || {};
   if (!diagnosis || !diagnosis.trim()) {
     return res.status(400).json({ error: 'Diagnosis is required.' });
@@ -57,8 +72,8 @@ router.post('/patients/:id/consultations', requirePermission('consult'), async (
 
 // --- Prescriptions ---------------------------------------------------------
 
-router.get('/patients/:id/prescriptions', async (req, res) => {
-  if (!mayView(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
+router.get('/patients/:id/prescriptions', requireOwnPatient('id'), async (req, res) => {
+  if (!mayViewClinical(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
   if (!(await patientOr404(req, res))) return;
   const rows = await queryAll(
     'SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC, id DESC',
@@ -67,7 +82,7 @@ router.get('/patients/:id/prescriptions', async (req, res) => {
   res.json({ prescriptions: rows.map(mapPrescription) });
 });
 
-router.post('/patients/:id/prescriptions', requirePermission('prescribe'), async (req, res) => {
+router.post('/patients/:id/prescriptions', requirePermission('prescribe'), requireOwnPatient('id'), async (req, res) => {
   const { medication, dosage, frequency, duration, notes } = req.body || {};
   if (!medication || !medication.trim() || !dosage || !dosage.trim() || !frequency || !frequency.trim()) {
     return res.status(400).json({ error: 'Medication, dosage and frequency are required.' });
@@ -88,7 +103,7 @@ router.post('/patients/:id/prescriptions', requirePermission('prescribe'), async
   res.status(201).json({ prescriptions: rows.map(mapPrescription) });
 });
 
-router.patch('/prescriptions/:id', requirePermission('prescribe'), async (req, res) => {
+router.patch('/prescriptions/:id', requirePermission('prescribe'), requireOwnRecord('prescriptions'), async (req, res) => {
   const { status } = req.body || {};
   if (!['active', 'completed', 'cancelled'].includes(status)) {
     return res.status(400).json({ error: 'Status must be active, completed or cancelled.' });
@@ -102,8 +117,8 @@ router.patch('/prescriptions/:id', requirePermission('prescribe'), async (req, r
 
 // --- Lab orders ------------------------------------------------------------
 
-router.get('/patients/:id/lab-orders', async (req, res) => {
-  if (!mayView(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
+router.get('/patients/:id/lab-orders', requireOwnPatient('id'), async (req, res) => {
+  if (!mayViewClinical(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions.' });
   if (!(await patientOr404(req, res))) return;
   const rows = await queryAll(
     'SELECT * FROM lab_orders WHERE patient_id = ? ORDER BY created_at DESC, id DESC',
@@ -112,7 +127,7 @@ router.get('/patients/:id/lab-orders', async (req, res) => {
   res.json({ labOrders: rows.map(mapLabOrder) });
 });
 
-router.post('/patients/:id/lab-orders', requirePermission('order_lab'), async (req, res) => {
+router.post('/patients/:id/lab-orders', requirePermission('order_lab'), requireOwnPatient('id'), async (req, res) => {
   const { testName, notes } = req.body || {};
   if (!testName || !testName.trim()) {
     return res.status(400).json({ error: 'Test name is required.' });
@@ -133,7 +148,7 @@ router.post('/patients/:id/lab-orders', requirePermission('order_lab'), async (r
   res.status(201).json({ labOrders: rows.map(mapLabOrder) });
 });
 
-router.patch('/lab-orders/:id', requirePermission('order_lab'), async (req, res) => {
+router.patch('/lab-orders/:id', requirePermission('order_lab'), requireOwnRecord('lab_orders'), async (req, res) => {
   const { status } = req.body || {};
   if (!['ordered', 'collected', 'completed', 'cancelled'].includes(status)) {
     return res.status(400).json({ error: 'Status must be ordered, collected, completed or cancelled.' });

@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { queryOne, queryAll, run, mapAppointment } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/rbac.js';
+import { requirePermission, can } from '../middleware/rbac.js';
 import { audit } from '../audit.js';
 
 const router = Router();
@@ -14,13 +14,23 @@ router.use(requireAuth);
 
 const STATUSES = ['scheduled', 'checked_in', 'completed', 'cancelled', 'no_show'];
 
+// The queue belongs to reception (and admin). Doctors may read it only
+// for themselves — their own appointments, forced server-side, whatever
+// the query asks for. Nurses have no business with the booking queue.
 router.get('/', async (req, res) => {
+  if (!can(req.user.role, 'schedule') && !can(req.user.role, 'consult')) {
+    return res.status(403).json({ error: 'Insufficient permissions.' });
+  }
   const { date, status, doctor, patient } = req.query;
   const where = [];
   const args = [];
+  if (req.user.role === 'doctor') {
+    where.push('a.doctor_id = ?'); args.push(req.user.sub);
+  } else if (doctor) {
+    where.push('a.doctor_id = ?'); args.push(doctor);
+  }
   if (date) { where.push('a.date = ?'); args.push(date); }
   if (status && STATUSES.includes(status)) { where.push('a.status = ?'); args.push(status); }
-  if (doctor) { where.push('a.doctor_id = ?'); args.push(doctor); }
   if (patient) { where.push('a.patient_id = ?'); args.push(patient); }
   const rows = await queryAll(
     `SELECT a.*, p.name AS patient_name FROM appointments a
