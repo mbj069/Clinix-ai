@@ -32,15 +32,23 @@ clinix-ai/
 - **RBAC, enforced server-side** — the API filters every response to the caller's role; frontend checks are UX only
   | Role | Access |
   |---|---|
-  | Administrator | Full access + audit log + AI config |
-  | Doctor | Records, sensitive data, notes, scribe |
-  | Nurse | Records, vitals editing |
-  | Receptionist | Basic demographics only (clinical data redacted + 403 on sensitive routes) |
+  | Administrator | Full access + audit log + AI config + user management |
+  | Doctor | Records, sensitive data, notes, scribe, consultations, prescriptions, lab orders |
+  | Nurse | Records, vitals editing + history, nursing tasks |
+  | Receptionist | Basic demographics only (clinical data redacted + 403 on sensitive routes), patient registration, appointments |
+- **Role panels** — Reception (today's queue, check-in, quick registration), Doctor (my appointments, consultations, prescriptions, lab orders), Nursing (vitals recording + history, ward tasks), Admin (staff accounts, activate/deactivate, system stats)
+- **Data entry** — register and edit patients, book appointments (scheduled → checked in → completed / cancelled), record consultations, prescriptions and lab orders, keep a full vitals history per patient
+- **Responsive** — sidebar navigation on desktop, slide-in drawer on mobile; tables scroll, forms stack on small screens
 - **Audit logging** — append-only server table; no delete/update API exists
 - **AI gateway** — provider API keys stay on the server; admin configures any OpenAI-compatible provider in Settings → AI
   - Clinical summarizer (patient record → ✨ AI summary)
   - AI scribe (rough notes → clinician-approved SOAP draft)
   - Natural-language patient search (agentic tool loop, RBAC-filtered)
+
+### Roadmap
+
+- **Phase 1 (done)** — data entry + reception, doctor, nursing and admin panels + responsive redesign
+- **Phase 2 (next)** — Lab module (test catalog, results, lab tech role), Pharmacy (medicine stock, dispensing, pharmacist role), Billing (invoices, payments, receipts)
 
 ## Demo accounts
 
@@ -89,9 +97,31 @@ Notes for a client demo: cold starts add a few seconds on the first request afte
 | POST | `/api/auth/login` | — | — |
 | GET | `/api/auth/me` | JWT | — |
 | GET | `/api/patients?q=` | JWT | view basic |
+| POST | `/api/patients` | JWT | add_patients |
 | GET | `/api/patients/:id` | JWT | view basic (fields filtered) |
+| PATCH | `/api/patients/:id` | JWT | edit_patients |
 | PATCH | `/api/patients/:id/vitals` | JWT | edit_vitals |
 | POST | `/api/patients/:id/notes` | JWT | edit_patients |
+| GET | `/api/patients/:id/vitals` | JWT | view basic |
+| POST | `/api/patients/:id/vitals` | JWT | edit_vitals |
+| GET | `/api/patients/:id/consultations` | JWT | view basic |
+| POST | `/api/patients/:id/consultations` | JWT | consult |
+| GET | `/api/patients/:id/prescriptions` | JWT | view basic |
+| POST | `/api/patients/:id/prescriptions` | JWT | prescribe |
+| PATCH | `/api/prescriptions/:id` | JWT | prescribe |
+| GET | `/api/patients/:id/lab-orders` | JWT | view basic |
+| POST | `/api/patients/:id/lab-orders` | JWT | order_lab |
+| PATCH | `/api/lab-orders/:id` | JWT | order_lab |
+| GET | `/api/appointments?date=&status=&doctor=&patient=` | JWT | any signed-in |
+| POST | `/api/appointments` | JWT | schedule |
+| PATCH | `/api/appointments/:id` | JWT | schedule |
+| GET | `/api/tasks?status=&patient=` | JWT | view basic |
+| POST | `/api/tasks` | JWT | manage_tasks |
+| PATCH | `/api/tasks/:id` | JWT | manage_tasks |
+| GET | `/api/users` | JWT | manage_users |
+| POST | `/api/users` | JWT | manage_users |
+| PATCH | `/api/users/:id` | JWT | manage_users |
+| GET | `/api/users/doctors` | JWT | any signed-in |
 | GET | `/api/audit` | JWT | view_audit_log |
 | POST | `/api/ai/summary` | JWT | view_sensitive |
 | POST | `/api/ai/scribe` | JWT | edit_patients |
@@ -104,6 +134,7 @@ Notes for a client demo: cold starts add a few seconds on the first request afte
 - [x] `JWT_SECRET` required in production — the server refuses to start without it (fail-closed, no public fallback)
 - [x] AI provider key encrypted at rest (AES-256-GCM; key from `ENCRYPTION_KEY` or derived from `JWT_SECRET`)
 - [x] Rate limiting on sign-in (10 / 15 min) and the API (300 / 15 min)
+- [x] v2 Phase 1 — full data entry (patients, appointments, consultations, prescriptions, lab orders, vitals history, tasks), user management with deactivation, role panels, responsive layout
 - [ ] Short token TTL + refresh rotation; session timeout + automatic logout
 - [ ] Field-level encryption for PHI at rest
 - [ ] Encrypted backups (Turso PITR / export)

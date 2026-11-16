@@ -25,12 +25,17 @@ export default function PatientList() {
   return (
     <div>
       <h2>Patients</h2>
-      <input
-        className="search"
-        placeholder="Search by name, ID, or condition…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
+      <div className="page-actions">
+        <input
+          className="search"
+          placeholder="Search by name, ID, or condition…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        {can('add_patients') && (
+          <Link to="/patients/new" className="btn primary">Register patient</Link>
+        )}
+      </div>
       {loading ? (
         <p className="muted">Loading…</p>
       ) : (

@@ -7,18 +7,18 @@
 export const ROLES = {
   admin: {
     label: 'Administrator',
-    permissions: ['view_patients', 'edit_patients', 'view_sensitive', 'manage_users', 'view_audit_log', 'schedule', 'edit_vitals', 'ai_config'],
+    permissions: ['view_patients', 'add_patients', 'edit_patients', 'view_sensitive', 'manage_users', 'view_audit_log', 'schedule', 'edit_vitals', 'ai_config', 'consult', 'prescribe', 'order_lab', 'manage_tasks'],
   },
   doctor: {
     label: 'Doctor',
-    permissions: ['view_patients', 'edit_patients', 'view_sensitive', 'schedule', 'edit_vitals'],
+    permissions: ['view_patients', 'add_patients', 'edit_patients', 'view_sensitive', 'schedule', 'edit_vitals', 'consult', 'prescribe', 'order_lab'],
   },
   nurse: {
     label: 'Nurse',
-    permissions: ['view_patients', 'edit_vitals', 'schedule'],
+    permissions: ['view_patients', 'edit_vitals', 'schedule', 'manage_tasks'],
   },
   receptionist: {
     label: 'Receptionist',
-    permissions: ['view_patients_basic', 'schedule'],
+    permissions: ['view_patients_basic', 'add_patients', 'schedule'],
   },
 };

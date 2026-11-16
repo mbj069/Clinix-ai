@@ -15,6 +15,7 @@ export default function PatientDetail() {
   const [vitalsDraft, setVitalsDraft] = useState({});
   const [note, setNote] = useState('');
   const [aiReady, setAiReady] = useState(false);
+  const [history, setHistory] = useState({ appointments: [], consultations: [], prescriptions: [], labOrders: [], vitals: [] });
   const ai = useAI();
 
   const canViewSensitive = can('view_sensitive');
@@ -33,6 +34,21 @@ export default function PatientDetail() {
       })
       .finally(() => setLoading(false));
     getAIStatus().then((s) => setAiReady(s.hasApiKey)).catch(() => setAiReady(false));
+    Promise.all([
+      api(`/appointments?patient=${id}`).catch(() => ({ appointments: [] })),
+      api(`/patients/${id}/consultations`).catch(() => ({ consultations: [] })),
+      api(`/patients/${id}/prescriptions`).catch(() => ({ prescriptions: [] })),
+      api(`/patients/${id}/lab-orders`).catch(() => ({ labOrders: [] })),
+      api(`/patients/${id}/vitals`).catch(() => ({ vitals: [] })),
+    ])
+      .then(([a, c, r, l, v]) => setHistory({
+        appointments: a.appointments || [],
+        consultations: c.consultations || [],
+        prescriptions: r.prescriptions || [],
+        labOrders: l.labOrders || [],
+        vitals: v.vitals || [],
+      }))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -77,6 +93,9 @@ export default function PatientDetail() {
     <div>
       <Link to="/patients">← Back to patients</Link>
       <h2>{patient.name} <span className="mono muted">{patient.id}</span></h2>
+      {canEdit && (
+        <p><Link to={`/patients/${patient.id}/edit`} className="btn small">Edit patient</Link></p>
+      )}
 
       <div className="grid2">
         <section className="panel">
@@ -162,6 +181,67 @@ export default function PatientDetail() {
           <p>🔒 Restricted — your role (<strong>{user.role}</strong>) does not have permission to view sensitive clinical data. This access attempt has been logged.</p>
         </section>
       )}
+
+      <div className="grid2">
+        <section className="panel">
+          <h3>Appointments</h3>
+          {history.appointments.length === 0 ? <p className="muted">No appointments.</p> : (
+            <ul>{history.appointments.map((a) => (
+              <li key={a.id}>{a.date} · {a.time} — {a.reason || 'Visit'} ({a.doctorName || '—'}) <span className={`chip ${a.status}`}>{a.status.replace('_', ' ')}</span></li>
+            ))}</ul>
+          )}
+        </section>
+
+        <section className="panel">
+          <h3>Consultations</h3>
+          {history.consultations.length === 0 ? <p className="muted">No consultations yet.</p> : (
+            <ul>{history.consultations.map((c) => (
+              <li key={c.id}><strong>{c.date}</strong> — {c.diagnosis}<br /><span className="muted">{c.plan}</span> <span className="muted">({c.doctorName})</span></li>
+            ))}</ul>
+          )}
+        </section>
+
+        <section className="panel">
+          <h3>Prescriptions</h3>
+          {history.prescriptions.length === 0 ? <p className="muted">No prescriptions.</p> : (
+            <ul>{history.prescriptions.map((p) => (
+              <li key={p.id}><strong>{p.medication}</strong> {p.dosage}, {p.frequency} <span className={`chip ${p.status}`}>{p.status}</span></li>
+            ))}</ul>
+          )}
+        </section>
+
+        <section className="panel">
+          <h3>Lab orders</h3>
+          {history.labOrders.length === 0 ? <p className="muted">No lab orders.</p> : (
+            <ul>{history.labOrders.map((l) => (
+              <li key={l.id}><strong>{l.testName}</strong> <span className={`chip ${l.status}`}>{l.status}</span></li>
+            ))}</ul>
+          )}
+        </section>
+      </div>
+
+      <section className="panel">
+        <h3>Vitals history</h3>
+        {history.vitals.length === 0 ? <p className="muted">No recorded vitals yet.</p> : (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Recorded</th><th>BP</th><th>HR</th><th>Temp</th><th>SpO₂</th><th>By</th></tr></thead>
+              <tbody>
+                {history.vitals.map((v) => (
+                  <tr key={v.id}>
+                    <td>{new Date(v.recordedAt).toLocaleString()}</td>
+                    <td>{v.bp || '—'}</td>
+                    <td>{v.hr || '—'}</td>
+                    <td>{v.temp || '—'}</td>
+                    <td>{v.spo2 || '—'}</td>
+                    <td>{v.recordedByName}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

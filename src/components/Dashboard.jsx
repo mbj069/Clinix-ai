@@ -6,13 +6,22 @@ import { api } from '../utils/api';
 export default function Dashboard() {
   const { user, can } = useAuth();
   const [patients, setPatients] = useState([]);
+  const [todayAppts, setTodayAppts] = useState(null);
+  const [openTasks, setOpenTasks] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
     api('/patients')
       .then((d) => setPatients(d.patients))
       .catch(() => setPatients([]))
       .finally(() => setLoading(false));
+    api(`/appointments?date=${today}`)
+      .then((d) => setTodayAppts(d.appointments.length))
+      .catch(() => setTodayAppts(null));
+    api('/tasks?status=open')
+      .then((d) => setOpenTasks(d.tasks.length))
+      .catch(() => setOpenTasks(null));
   }, []);
 
   return (
@@ -26,6 +35,20 @@ export default function Dashboard() {
           <div className="card-label">Patients</div>
           <Link to="/patients" className="card-link">View all →</Link>
         </div>
+        {can('schedule') && (
+          <div className="card">
+            <div className="card-num">{todayAppts === null ? '…' : todayAppts}</div>
+            <div className="card-label">Appointments today</div>
+            <Link to="/appointments" className="card-link">View schedule →</Link>
+          </div>
+        )}
+        {can('manage_tasks') && (
+          <div className="card">
+            <div className="card-num">{openTasks === null ? '…' : openTasks}</div>
+            <div className="card-label">Open nursing tasks</div>
+            <Link to="/nursing" className="card-link">Open nursing →</Link>
+          </div>
+        )}
         <div className="card">
           <div className="card-num">✨</div>
           <div className="card-label">AI search</div>
