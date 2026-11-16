@@ -29,13 +29,15 @@ clinix-ai/
 ## Features
 
 - **Authentication** — bcrypt-hashed passwords, JWT sessions (8h), 4 demo roles
-- **RBAC, enforced server-side** — the API filters every response to the caller's role; frontend checks are UX only
+- **RBAC, enforced server-side** — the API filters every response to the caller's role; frontend checks are UX only. The model follows the patient journey: reception registers → books (inside the doctor's sitting hours) → checks in; the doctor consults their own patients, prescribes, orders labs; the nurse records vitals and works the ward tasks; the admin manages staff, hours, and the audit log.
   | Role | Access |
   |---|---|
-  | Administrator | Full access + audit log + AI config + user management |
-  | Doctor | Records, sensitive data, notes, scribe, consultations, prescriptions, lab orders |
-  | Nurse | Records, vitals editing + history, nursing tasks |
-  | Receptionist | Basic demographics only (clinical data redacted + 403 on sensitive routes), patient registration, appointments |
+  | Administrator | Full access + audit log + AI config + user management + sitting hours |
+  | Doctor | Only their own patients (a patient becomes theirs when reception books them; a cancelled booking is not a link), sensitive data, notes, scribe, consultations, prescriptions, lab orders |
+  | Nurse | All patients, clinical data (allergies, conditions, medications) but never the SSN, vitals editing + history, nursing tasks |
+  | Receptionist | Basic demographics only (no clinical data, no vitals, no SSN), patient registration + demographics editing, booking + check-in |
+- **Doctor sitting hours** — admin sets weekly hours per doctor; dashboards and reception show who is on duty and when; booking shows whether the chosen time is inside the doctor's hours
+- **Role-aware dashboard** — each role sees only its own numbers: admin everything, doctor my appointments/consultations/patients, nurse ward numbers, reception today's queue
 - **Role panels** — Reception (today's queue, check-in, quick registration), Doctor (my appointments, consultations, prescriptions, lab orders), Nursing (vitals recording + history, ward tasks), Admin (staff accounts, activate/deactivate, system stats)
 - **Data entry** — register and edit patients, book appointments (scheduled → checked in → completed / cancelled), record consultations, prescriptions and lab orders, keep a full vitals history per patient
 - **Responsive** — sidebar navigation on desktop, slide-in drawer on mobile; tables scroll, forms stack on small screens
@@ -48,6 +50,7 @@ clinix-ai/
 ### Roadmap
 
 - **Phase 1 (done)** — data entry + reception, doctor, nursing and admin panels + responsive redesign
+- **Role model (done)** — rethought access per role: doctor sees only their own patients, booking is reception-only, nurses see clinical data but no SSN, role-aware dashboards, weekly doctor sitting hours
 - **Phase 2 (next)** — Lab module (test catalog, results, lab tech role), Pharmacy (medicine stock, dispensing, pharmacist role), Billing (invoices, payments, receipts)
 
 ## Demo accounts
@@ -55,7 +58,8 @@ clinix-ai/
 | Username | Password | Role |
 |---|---|---|
 | `admin` | `admin123` | Administrator |
-| `doctor` | `doctor123` | Doctor |
+| `doctor` | `doctor123` | Doctor (Dr. Daniel Reed) |
+| `doctor2` | `doctor123` | Doctor (Dr. Sarah Chen) |
 | `nurse` | `nurse123` | Nurse |
 | `reception` | `reception123` | Receptionist |
 
@@ -96,25 +100,29 @@ Notes for a client demo: cold starts add a few seconds on the first request afte
 |---|---|---|---|
 | POST | `/api/auth/login` | — | — |
 | GET | `/api/auth/me` | JWT | — |
-| GET | `/api/patients?q=` | JWT | view basic |
+| GET | `/api/patients?q=` | JWT | view basic (doctors: own patients only) |
 | POST | `/api/patients` | JWT | add_patients |
-| GET | `/api/patients/:id` | JWT | view basic (fields filtered) |
-| PATCH | `/api/patients/:id` | JWT | edit_patients |
+| GET | `/api/patients/:id` | JWT | view basic (fields filtered; doctors: own only) |
+| PATCH | `/api/patients/:id` | JWT | edit_demographics (demographics only) |
 | PATCH | `/api/patients/:id/vitals` | JWT | edit_vitals |
-| POST | `/api/patients/:id/notes` | JWT | edit_patients |
-| GET | `/api/patients/:id/vitals` | JWT | view basic |
+| POST | `/api/patients/:id/notes` | JWT | edit_patients (doctors: own only) |
+| GET | `/api/patients/:id/vitals` | JWT | view_patients (doctors: own only) |
 | POST | `/api/patients/:id/vitals` | JWT | edit_vitals |
-| GET | `/api/patients/:id/consultations` | JWT | view basic |
-| POST | `/api/patients/:id/consultations` | JWT | consult |
-| GET | `/api/patients/:id/prescriptions` | JWT | view basic |
-| POST | `/api/patients/:id/prescriptions` | JWT | prescribe |
-| PATCH | `/api/prescriptions/:id` | JWT | prescribe |
-| GET | `/api/patients/:id/lab-orders` | JWT | view basic |
-| POST | `/api/patients/:id/lab-orders` | JWT | order_lab |
-| PATCH | `/api/lab-orders/:id` | JWT | order_lab |
-| GET | `/api/appointments?date=&status=&doctor=&patient=` | JWT | any signed-in |
+| GET | `/api/patients/:id/consultations` | JWT | view_patients (doctors: own only) |
+| POST | `/api/patients/:id/consultations` | JWT | consult (doctors: own only) |
+| GET | `/api/patients/:id/prescriptions` | JWT | view_patients (doctors: own only) |
+| POST | `/api/patients/:id/prescriptions` | JWT | prescribe (doctors: own only) |
+| PATCH | `/api/prescriptions/:id` | JWT | prescribe (doctors: own only) |
+| GET | `/api/patients/:id/lab-orders` | JWT | view_patients (doctors: own only) |
+| POST | `/api/patients/:id/lab-orders` | JWT | order_lab (doctors: own only) |
+| PATCH | `/api/lab-orders/:id` | JWT | order_lab (doctors: own only) |
+| GET | `/api/appointments?date=&status=&doctor=&patient=` | JWT | schedule, or consult (doctors: own only) |
 | POST | `/api/appointments` | JWT | schedule |
 | PATCH | `/api/appointments/:id` | JWT | schedule |
+| GET | `/api/schedules` | JWT | any signed-in |
+| POST | `/api/schedules` | JWT | manage_users |
+| DELETE | `/api/schedules/:id` | JWT | manage_users |
+| GET | `/api/stats/dashboard?date=&dayOfWeek=` | JWT | any signed-in (role-shaped totals) |
 | GET | `/api/tasks?status=&patient=` | JWT | view basic |
 | POST | `/api/tasks` | JWT | manage_tasks |
 | PATCH | `/api/tasks/:id` | JWT | manage_tasks |
@@ -123,9 +131,9 @@ Notes for a client demo: cold starts add a few seconds on the first request afte
 | PATCH | `/api/users/:id` | JWT | manage_users |
 | GET | `/api/users/doctors` | JWT | any signed-in |
 | GET | `/api/audit` | JWT | view_audit_log |
-| POST | `/api/ai/summary` | JWT | view_sensitive |
-| POST | `/api/ai/scribe` | JWT | edit_patients |
-| POST | `/api/ai/search` | JWT | any signed-in |
+| POST | `/api/ai/summary` | JWT | view_sensitive (doctors: own only) |
+| POST | `/api/ai/scribe` | JWT | edit_patients (doctors: own only) |
+| POST | `/api/ai/search` | JWT | ai_search (doctors: own only) |
 | GET/PUT | `/api/ai/config` | JWT | ai_config |
 
 ## Production hardening checklist
