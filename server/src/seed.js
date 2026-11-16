@@ -1,11 +1,12 @@
-// Seed demo users + patients. Safe to re-run (uses INSERT OR REPLACE).
-// Run: npm run seed
+// Seed demo users + patients. Safe to re-run (uses INSERT ... ON CONFLICT).
+// Run: npm run seed — or imported by the server entries, which seed an
+// empty database automatically on first boot.
 
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
-import { db, initSchema } from './db.js';
-
-initSchema();
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { run } from './db.js';
 
 const USERS = [
   { id: 'u-admin-1', username: 'admin', password: 'admin123', name: 'Ava Admin', role: 'admin' },
@@ -62,42 +63,41 @@ const PATIENTS = [
   },
 ];
 
-const upsertUser = db.prepare(`
-  INSERT INTO users (id, username, password_hash, name, role)
-  VALUES (@id, @username, @password_hash, @name, @role)
-  ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, name=excluded.name, role=excluded.role
-`);
+export async function seedDatabase() {
+  for (const u of USERS) {
+    await run(
+      `INSERT INTO users (id, username, password_hash, name, role)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, name=excluded.name, role=excluded.role`,
+      [u.id, u.username, bcrypt.hashSync(u.password, 10), u.name, u.role]
+    );
+    console.log(`user: ${u.username} (${u.role})`);
+  }
 
-for (const u of USERS) {
-  upsertUser.run({
-    id: u.id,
-    username: u.username,
-    password_hash: bcrypt.hashSync(u.password, 10),
-    name: u.name,
-    role: u.role,
-  });
-  console.log(`user: ${u.username} (${u.role})`);
+  for (const p of PATIENTS) {
+    await run(
+      `INSERT INTO patients (id, name, dob, gender, phone, blood_type, allergies, conditions, medications, vitals, notes, ssn_last4)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name, dob=excluded.dob, gender=excluded.gender, phone=excluded.phone,
+         blood_type=excluded.blood_type, allergies=excluded.allergies, conditions=excluded.conditions,
+         medications=excluded.medications, vitals=excluded.vitals, notes=excluded.notes,
+         ssn_last4=excluded.ssn_last4, updated_at=datetime('now')`,
+      [
+        p.id, p.name, p.dob, p.gender, p.phone, p.blood_type,
+        JSON.stringify(p.allergies), JSON.stringify(p.conditions),
+        JSON.stringify(p.medications), JSON.stringify(p.vitals),
+        p.notes, p.ssn_last4,
+      ]
+    );
+    console.log(`patient: ${p.name} (${p.id})`);
+  }
 }
 
-const upsertPatient = db.prepare(`
-  INSERT INTO patients (id, name, dob, gender, phone, blood_type, allergies, conditions, medications, vitals, notes, ssn_last4)
-  VALUES (@id, @name, @dob, @gender, @phone, @blood_type, @allergies, @conditions, @medications, @vitals, @notes, @ssn_last4)
-  ON CONFLICT(id) DO UPDATE SET
-    name=excluded.name, dob=excluded.dob, gender=excluded.gender, phone=excluded.phone,
-    blood_type=excluded.blood_type, allergies=excluded.allergies, conditions=excluded.conditions,
-    medications=excluded.medications, vitals=excluded.vitals, notes=excluded.notes,
-    ssn_last4=excluded.ssn_last4, updated_at=datetime('now')
-`);
-
-for (const p of PATIENTS) {
-  upsertPatient.run({
-    ...p,
-    allergies: JSON.stringify(p.allergies),
-    conditions: JSON.stringify(p.conditions),
-    medications: JSON.stringify(p.medications),
-    vitals: JSON.stringify(p.vitals),
-  });
-  console.log(`patient: ${p.name} (${p.id})`);
+// Run directly: `npm run seed`. Imported: the caller decides when to seed.
+const invokedDirectly =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) {
+  await seedDatabase();
+  console.log('Seed complete.');
 }
-
-console.log('Seed complete.');

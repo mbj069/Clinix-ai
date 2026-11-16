@@ -7,7 +7,7 @@
 // ------------------------------------------------------------------
 
 import { Router } from 'express';
-import { db, mapPatient } from '../db.js';
+import { queryOne, queryAll, run, mapPatient } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission, can, filterPatientFor } from '../middleware/rbac.js';
 import { audit } from '../audit.js';
@@ -17,8 +17,8 @@ router.use(requireAuth);
 
 // --- Provider config (DB row, env fallback) --------------------------------
 
-function getAIConfig() {
-  const row = db.prepare('SELECT * FROM ai_config WHERE id = 1').get();
+async function getAIConfig() {
+  const row = await queryOne('SELECT * FROM ai_config WHERE id = 1');
   return {
     baseUrl: row?.base_url || process.env.AI_PROVIDER_URL || 'https://api.openai.com/v1',
     // Admin-set key wins; otherwise env var. Never sent to the client.
@@ -28,7 +28,7 @@ function getAIConfig() {
 }
 
 async function providerChat({ messages, tools = null, temperature = 0.3 }) {
-  const { baseUrl, apiKey, model } = getAIConfig();
+  const { baseUrl, apiKey, model } = await getAIConfig();
   if (!apiKey) {
     const err = new Error('No AI provider API key configured.');
     err.code = 'NO_API_KEY';
@@ -86,8 +86,8 @@ function patientText(patient) {
   return lines.join('\n');
 }
 
-function getFilteredPatient(role, id) {
-  const row = db.prepare('SELECT * FROM patients WHERE id = ?').get(id);
+async function getFilteredPatient(role, id) {
+  const row = await queryOne('SELECT * FROM patients WHERE id = ?', [id]);
   if (!row) return null;
   return filterPatientFor(role, mapPatient(row));
 }
@@ -136,9 +136,9 @@ const SEARCH_TOOL = {
   },
 };
 
-function runSearch(role, query) {
+async function runSearch(role, query) {
   const q = query.toLowerCase();
-  const rows = db.prepare('SELECT * FROM patients ORDER BY name').all();
+  const rows = await queryAll('SELECT * FROM patients ORDER BY name');
   return rows
     .map(mapPatient)
     .filter(
@@ -160,7 +160,7 @@ const aiError = (res, e) => {
 // POST /api/ai/summary { patientId }
 router.post('/summary', requirePermission('view_sensitive'), async (req, res) => {
   try {
-    const patient = getFilteredPatient(req.user.role, req.body?.patientId);
+    const patient = await getFilteredPatient(req.user.role, req.body?.patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found.' });
     const { message, usage } = await providerChat({
       messages: [
@@ -168,7 +168,7 @@ router.post('/summary', requirePermission('view_sensitive'), async (req, res) =>
         { role: 'user', content: `Patient record:\n${patientText(patient)}\n\nWrite the clinical summary.` },
       ],
     });
-    audit({
+    await audit({
       actorId: req.user.sub, actorName: req.user.name, role: req.user.role,
       action: 'AI_SUMMARY', patientId: patient.id,
       details: `AI summary generated for ${patient.name} (${patient.id})${usage ? ` — ${usage.total_tokens} tokens` : ''}`,
@@ -184,7 +184,7 @@ router.post('/scribe', requirePermission('edit_patients'), async (req, res) => {
   try {
     const { patientId, roughNotes } = req.body || {};
     if (!roughNotes?.trim()) return res.status(400).json({ error: 'Rough notes are required.' });
-    const patient = getFilteredPatient(req.user.role, patientId);
+    const patient = await getFilteredPatient(req.user.role, patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found.' });
     const { message, usage } = await providerChat({
       messages: [
@@ -193,7 +193,7 @@ router.post('/scribe', requirePermission('edit_patients'), async (req, res) => {
       ],
       temperature: 0.2,
     });
-    audit({
+    await audit({
       actorId: req.user.sub, actorName: req.user.name, role: req.user.role,
       action: 'AI_SCRIBE', patientId: patient.id,
       details: `AI SOAP draft generated for ${patient.name} (${patient.id})${usage ? ` — ${usage.total_tokens} tokens` : ''}`,
@@ -224,7 +224,7 @@ router.post('/search', async (req, res) => {
         let result;
         if (tc.function.name === 'search_patients') {
           const args = JSON.parse(tc.function.arguments || '{}');
-          result = runSearch(req.user.role, args.query || '');
+          result = await runSearch(req.user.role, args.query || '');
         } else {
           result = { error: `Unknown tool: ${tc.function.name}` };
         }
@@ -233,7 +233,7 @@ router.post('/search', async (req, res) => {
     }
     const last = messages[messages.length - 1];
     const answer = last.role === 'assistant' ? last.content : 'No answer produced.';
-    audit({
+    await audit({
       actorId: req.user.sub, actorName: req.user.name, role: req.user.role,
       action: 'AI_SEARCH', details: `AI search: "${question.trim().slice(0, 80)}"${usage ? ` — ${usage.total_tokens} tokens` : ''}`,
     });
@@ -244,17 +244,20 @@ router.post('/search', async (req, res) => {
 });
 
 // GET /api/ai/config — admin; key presence only, never the key itself
-router.get('/config', requirePermission('ai_config'), (req, res) => {
-  const c = getAIConfig();
-  res.json({ baseUrl: c.baseUrl, model: c.model, hasApiKey: !!c.apiKey, keySource: c.apiKey ? (db.prepare('SELECT api_key FROM ai_config WHERE id = 1').get()?.api_key ? 'database' : 'environment') : 'none' });
+router.get('/config', requirePermission('ai_config'), async (req, res) => {
+  const c = await getAIConfig();
+  const keyRow = await queryOne('SELECT api_key FROM ai_config WHERE id = 1');
+  res.json({ baseUrl: c.baseUrl, model: c.model, hasApiKey: !!c.apiKey, keySource: c.apiKey ? (keyRow?.api_key ? 'database' : 'environment') : 'none' });
 });
 
 // PUT /api/ai/config { baseUrl, apiKey, model } — admin
-router.put('/config', requirePermission('ai_config'), (req, res) => {
+router.put('/config', requirePermission('ai_config'), async (req, res) => {
   const { baseUrl, apiKey, model } = req.body || {};
-  db.prepare('UPDATE ai_config SET base_url = COALESCE(?, base_url), api_key = COALESCE(?, api_key), model = COALESCE(?, model), updated_at = datetime(\'now\') WHERE id = 1')
-    .run(baseUrl || null, apiKey || null, model || null);
-  audit({
+  await run(
+    'UPDATE ai_config SET base_url = COALESCE(?, base_url), api_key = COALESCE(?, api_key), model = COALESCE(?, model), updated_at = datetime(\'now\') WHERE id = 1',
+    [baseUrl || null, apiKey || null, model || null]
+  );
+  await audit({
     actorId: req.user.sub, actorName: req.user.name, role: req.user.role,
     action: 'AI_CONFIG_UPDATE', details: `AI provider config updated (model: ${model || '(unchanged)'})`,
   });
@@ -271,7 +274,7 @@ router.post('/test', requirePermission('ai_config'), async (req, res) => {
       ],
       temperature: 0,
     });
-    audit({ actorId: req.user.sub, actorName: req.user.name, role: req.user.role, action: 'AI_CONFIG_TEST', details: 'AI provider connection test succeeded' });
+    await audit({ actorId: req.user.sub, actorName: req.user.name, role: req.user.role, action: 'AI_CONFIG_TEST', details: 'AI provider connection test succeeded' });
     res.json({ ok: true, reply: message.content?.slice(0, 50) });
   } catch (e) {
     aiError(res, e);

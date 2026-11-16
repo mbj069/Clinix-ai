@@ -1,23 +1,58 @@
 // ------------------------------------------------------------------
-// SQLite database + schema using Node's built-in node:sqlite (no native
-// dependencies). The data-access functions below are the seam where a
-// PostgreSQL driver would slot in later (all SQL here is portable).
+// Database — @libsql/client (libSQL / Turso).
+//
+// One driver for both environments:
+//   - Local dev: a SQLite file (no TURSO_DATABASE_URL → server/data/clinix.db)
+//   - Production (Vercel): Turso over HTTP (TURSO_DATABASE_URL + TURSO_AUTH_TOKEN)
+// All SQL here is portable SQLite, and every query goes through the
+// queryOne / queryAll / run helpers below.
 // ------------------------------------------------------------------
 
-import { DatabaseSync } from 'node:sqlite';
+import { createClient } from '@libsql/client';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DB_PATH = process.env.DB_PATH || './data/clinix.db';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+// DB_PATH (optional, local file) keeps the old override working; otherwise
+// the file lives next to the server code, independent of the working dir.
+const defaultFile = path.join(__dirname, '..', 'data', 'clinix.db');
+const url =
+  process.env.TURSO_DATABASE_URL ||
+  (process.env.DB_PATH ? `file:${process.env.DB_PATH}` : `file:${defaultFile}`);
+const isLocalFile = url.startsWith('file:');
 
-export const db = new DatabaseSync(DB_PATH);
-db.exec('PRAGMA journal_mode = WAL;');
-db.exec('PRAGMA foreign_keys = ON;');
+if (isLocalFile) {
+  const dir = path.dirname(url.slice('file:'.length));
+  if (dir && dir !== '.') fs.mkdirSync(dir, { recursive: true });
+}
 
-export function initSchema() {
-  db.exec(`
+export const client = createClient({
+  url,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+export async function queryOne(sql, args = []) {
+  const r = await client.execute({ sql, args });
+  return r.rows[0] ?? null;
+}
+
+export async function queryAll(sql, args = []) {
+  const r = await client.execute({ sql, args });
+  return r.rows;
+}
+
+export async function run(sql, args = []) {
+  await client.execute({ sql, args });
+}
+
+export async function initSchema() {
+  if (isLocalFile) {
+    await client.execute('PRAGMA journal_mode = WAL;');
+    await client.execute('PRAGMA foreign_keys = ON;');
+  }
+  await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
@@ -68,14 +103,13 @@ export function initSchema() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
-  // INSERT OR IGNORE can't be in the same exec reliably across drivers — separate step.
-  db.prepare('INSERT OR IGNORE INTO ai_config (id) VALUES (1)').run();
+  // INSERT OR IGNORE can't be in the same executeMultiple reliably across drivers — separate step.
+  await client.execute('INSERT OR IGNORE INTO ai_config (id) VALUES (1)');
 }
 
-// Create the schema on import so modules that prepare statements at load
-// time (audit.js) never run against missing tables. Idempotent, so the
-// explicit initSchema() calls in index.js / seed.js stay harmless.
-initSchema();
+// Schema ready before any query: run at import (top-level await).
+// Idempotent, so explicit initSchema() calls elsewhere stay harmless.
+await initSchema();
 
 // --- Row mappers ------------------------------------------------------------
 

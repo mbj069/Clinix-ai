@@ -15,14 +15,17 @@ clinix-ai/
 │   ├── components/       # Login, Dashboard, Patients, AuditLog, AI pages
 │   ├── context/          # Auth (JWT)
 │   └── utils/api.js      # API client
-└── server/               # Express backend (Node 22.5+)
+└── server/               # Express backend (Node 20+)
     └── src/
-        ├── index.js      # app entry
-        ├── db.js         # SQLite (node:sqlite) + schema
+        ├── index.js      # app entry (local dev)
+        ├── app.js        # Express app (shared by local + Vercel)
+        ├── db.js         # libSQL/Turso client + schema
         ├── seed.js       # demo users + patients
         ├── audit.js      # append-only audit writer
         ├── middleware/   # JWT auth, RBAC
         └── routes/       # auth, patients, audit, ai
+└── api/
+    └── index.js          # Vercel serverless entry (the Express app)
 ```
 
 ## Features
@@ -52,14 +55,14 @@ clinix-ai/
 
 ## Getting started
 
-Prerequisites: Node.js ≥ 22.5.
+Prerequisites: Node.js ≥ 20.
 
 ```bash
 # Backend
 cd server
 cp .env.example .env        # then set JWT_SECRET and AI_API_KEY
 npm install
-npm run seed                # creates data/clinix.db with demo users + patients
+npm run seed                # creates server/data/clinix.db with demo users + patients
 npm run dev                 # http://localhost:3001
 
 # Frontend (new terminal, repo root)
@@ -69,15 +72,16 @@ npm run dev                 # http://localhost:5173 (proxies /api to :3001)
 
 To enable AI features, set `AI_API_KEY` in `server/.env` (or configure it in the app as admin via Settings → AI).
 
-## Deploying (Render, free)
+## Deploying (Vercel + Turso, free)
 
-The backend serves the built frontend too, so one web service is the whole app:
+The frontend is static; the Express API runs as a Vercel serverless function backed by a Turso database (libSQL over HTTP). No credit card needed on either free tier.
 
-1. Push to GitHub, then in [Render](https://dashboard.render.com) → **New + → Blueprint** → connect the `Clinix-ai` repo. Render reads `render.yaml` and creates the service.
-2. On first deploy Render generates `JWT_SECRET` automatically. No other env vars are needed for the demo (AI features stay off until an admin adds a provider key in Settings → AI).
-3. The first boot seeds the demo users/patients automatically (same logins as above).
+1. In [Vercel](https://vercel.com/new) → **Import** the `Clinix-ai` repo (Hobby plan, no card). The framework is auto-detected as Vite.
+2. Add the Turso integration: project → **Storage → Turso → Add** — it provisions a database and injects `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` automatically. (Or create a database at [turso.tech](https://turso.tech) and set those two vars manually.)
+3. Add one more env var: `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`). The demo works without it, but sessions would share a public fallback secret, so don't skip this.
+4. Deploy. The first visit seeds the demo users/patients automatically (same logins as above).
 
-Notes for a client demo: the free tier sleeps after ~15 minutes idle, so the first load can take ~30–60s to wake. The free disk is ephemeral — a restart or redeploy wipes the database and re-seeds fresh demo data (audit history resets too). That's fine for a prototype demo, not for real patient data.
+Notes for a client demo: serverless cold starts add a few seconds on the first request after idle, and the AI features stay off until an admin adds a provider key in Settings → AI. Local dev still works offline — with no Turso vars set, the server uses a local SQLite file (`server/data/clinix.db`).
 
 ## API reference
 
