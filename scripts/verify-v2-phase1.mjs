@@ -94,9 +94,9 @@ ok('receptionist cannot add tasks (403)', recepTask.status === 403, `status ${re
 
 // Users (admin)
 const docs = await call(recep.token, '/users/doctors');
-ok('doctors directory readable by receptionist', docs.status === 200 && docs.doctors?.length === 1, `status ${docs.status}`);
+ok('doctors directory readable by receptionist', docs.status === 200 && docs.doctors?.length === 2, `status ${docs.status}`);
 const users = await call(admin.token, '/users');
-ok('admin lists 4 users', users.users?.length === 4, `got ${users.users?.length}`);
+ok('admin lists 5 users', users.users?.length === 5, `got ${users.users?.length}`);
 const recepUsers = await call(recep.token, '/users');
 ok('receptionist cannot list users (403)', recepUsers.status === 403, `status ${recepUsers.status}`);
 const newUser = await call(admin.token, '/users', 'POST', { username: 'pharm1', password: 'pharm123', name: 'Pat Pharmacist', role: 'nurse' });
