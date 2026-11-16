@@ -1,31 +1,37 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../utils/api';
+import { localToday, availabilityStatus } from '../utils/schedule';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Reception() {
   const [queue, setQueue] = useState([]);
   const [stats, setStats] = useState({ patients: 0, today: 0, checkedIn: 0 });
+  const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { date, dayOfWeek, now } = localToday();
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       api(`/appointments?date=${today()}`),
       api('/patients'),
+      api(`/stats/dashboard?date=${date}&dayOfWeek=${dayOfWeek}`),
     ])
-      .then(([a, p]) => {
+      .then(([a, p, s]) => {
         setQueue(a.appointments);
         setStats({
           patients: p.patients.length,
           today: a.appointments.length,
           checkedIn: a.appointments.filter((x) => x.status === 'checked_in').length,
         });
+        setDoctors(s.doctors || []);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -75,6 +81,29 @@ export default function Reception() {
         <Link to="/patients/new" className="btn primary">Register new patient</Link>{' '}
         <Link to="/appointments" className="btn">Book appointment</Link>
       </div>
+
+      {doctors.length > 0 && (
+        <>
+          <h3>Doctors on duty today</h3>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Doctor</th><th>Sitting hours</th><th>Status</th></tr></thead>
+              <tbody>
+                {doctors.map((d) => {
+                  const st = availabilityStatus(d.scheduleToday, now);
+                  return (
+                    <tr key={d.id}>
+                      <td>{d.name}</td>
+                      <td>{d.scheduleToday ? `${d.scheduleToday.startTime} – ${d.scheduleToday.endTime}` : '—'}</td>
+                      <td><span className={`chip ${st.cls}`}>{st.label}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {error && <div className="error">{error}</div>}
       <h3>Today's queue</h3>

@@ -38,7 +38,7 @@ function Shell({ children }) {
     { to: '/nursing', label: 'Nursing', show: can('edit_vitals') },
     { to: '/admin', label: 'Admin', show: can('manage_users') },
     { to: '/audit', label: 'Audit log', show: can('view_audit_log') },
-    { to: '/ai-search', label: 'AI search', show: true },
+    { to: '/ai-search', label: 'AI search', show: can('ai_search') },
     { to: '/scribe', label: 'AI scribe', show: can('edit_patients') },
     { to: '/settings/ai', label: 'AI settings', show: can('ai_config') },
   ].filter((l) => l.show);
@@ -105,7 +105,7 @@ export default function App() {
                   <ProtectedRoute permission="add_patients"><PatientForm /></ProtectedRoute>
                 } />
                 <Route path="/patients/:id/edit" element={
-                  <ProtectedRoute permission="edit_patients"><PatientForm /></ProtectedRoute>
+                  <ProtectedRoute permission="edit_demographics"><PatientForm /></ProtectedRoute>
                 } />
                 <Route path="/patients/:id" element={<PatientDetail />} />
                 <Route path="/appointments" element={
@@ -126,7 +126,9 @@ export default function App() {
                 <Route path="/audit" element={
                   <ProtectedRoute permission="view_audit_log"><AuditLog /></ProtectedRoute>
                 } />
-                <Route path="/ai-search" element={<AISearch />} />
+                <Route path="/ai-search" element={
+                  <ProtectedRoute permission="ai_search"><AISearch /></ProtectedRoute>
+                } />
                 <Route path="/scribe" element={
                   <ProtectedRoute permission="edit_patients"><AIScribe /></ProtectedRoute>
                 } />

@@ -19,8 +19,13 @@ export default function PatientDetail() {
   const ai = useAI();
 
   const canViewSensitive = can('view_sensitive');
+  const canViewClinical = canViewSensitive || can('view_clinical');
+  // Demographics are reception's + admin's job; clinical notes are the
+  // doctor's + admin's. Vitals are recorded by nurses (and admin) only.
+  const canEditDemographics = can('edit_demographics');
   const canEdit = can('edit_patients');
-  const canEditVitals = can('edit_vitals') || canEdit;
+  const canEditVitals = can('edit_vitals');
+  const canViewHistory = can('view_patients');
 
   useEffect(() => {
     setLoading(true);
@@ -93,7 +98,7 @@ export default function PatientDetail() {
     <div>
       <Link to="/patients">← Back to patients</Link>
       <h2>{patient.name} <span className="mono muted">{patient.id}</span></h2>
-      {canEdit && (
+      {canEditDemographics && (
         <p><Link to={`/patients/${patient.id}/edit`} className="btn small">Edit patient</Link></p>
       )}
 
@@ -108,10 +113,11 @@ export default function PatientDetail() {
           </dl>
         </section>
 
-        <section className="panel">
-          <h3>Vitals {canEditVitals && !editingVitals && (
-            <button className="btn small" onClick={() => setEditingVitals(true)}>Edit</button>
-          )}</h3>
+        {canViewHistory && (
+          <section className="panel">
+            <h3>Vitals {canEditVitals && !editingVitals && (
+              <button className="btn small" onClick={() => setEditingVitals(true)}>Edit</button>
+            )}</h3>
           {editingVitals ? (
             <div className="vitals-form">
               {['bp', 'hr', 'temp', 'spo2'].map((k) => (
@@ -132,13 +138,14 @@ export default function PatientDetail() {
               <dt>SpO₂</dt><dd>{patient.vitals.spo2}</dd>
             </dl>
           )}
-        </section>
+          </section>
+        )}
       </div>
 
-      {canViewSensitive ? (
+      {canViewClinical ? (
         <section className="panel">
           <h3>Clinical information
-            {aiReady && (
+            {canViewSensitive && aiReady && (
               <button
                 className="btn small"
                 disabled={ai.loading}
@@ -158,7 +165,7 @@ export default function PatientDetail() {
           <dl>
             <dt>Allergies</dt><dd>{patient.allergies.join(', ') || 'None known'}</dd>
             <dt>Conditions</dt><dd>{patient.conditions.join(', ') || '—'}</dd>
-            <dt>SSN</dt><dd className="mono">{patient.ssn}</dd>
+            {canViewSensitive && (<><dt>SSN</dt><dd className="mono">{patient.ssn}</dd></>)}
           </dl>
           <h4>Medications</h4>
           {patient.medications.length === 0 ? <p className="muted">No active medications.</p> : (
@@ -192,56 +199,62 @@ export default function PatientDetail() {
           )}
         </section>
 
-        <section className="panel">
-          <h3>Consultations</h3>
-          {history.consultations.length === 0 ? <p className="muted">No consultations yet.</p> : (
-            <ul>{history.consultations.map((c) => (
-              <li key={c.id}><strong>{c.date}</strong> — {c.diagnosis}<br /><span className="muted">{c.plan}</span> <span className="muted">({c.doctorName})</span></li>
-            ))}</ul>
-          )}
-        </section>
+        {canViewHistory && (
+          <>
+            <section className="panel">
+              <h3>Consultations</h3>
+              {history.consultations.length === 0 ? <p className="muted">No consultations yet.</p> : (
+                <ul>{history.consultations.map((c) => (
+                  <li key={c.id}><strong>{c.date}</strong> — {c.diagnosis}<br /><span className="muted">{c.plan}</span> <span className="muted">({c.doctorName})</span></li>
+                ))}</ul>
+              )}
+            </section>
 
-        <section className="panel">
-          <h3>Prescriptions</h3>
-          {history.prescriptions.length === 0 ? <p className="muted">No prescriptions.</p> : (
-            <ul>{history.prescriptions.map((p) => (
-              <li key={p.id}><strong>{p.medication}</strong> {p.dosage}, {p.frequency} <span className={`chip ${p.status}`}>{p.status}</span></li>
-            ))}</ul>
-          )}
-        </section>
+            <section className="panel">
+              <h3>Prescriptions</h3>
+              {history.prescriptions.length === 0 ? <p className="muted">No prescriptions.</p> : (
+                <ul>{history.prescriptions.map((p) => (
+                  <li key={p.id}><strong>{p.medication}</strong> {p.dosage}, {p.frequency} <span className={`chip ${p.status}`}>{p.status}</span></li>
+                ))}</ul>
+              )}
+            </section>
 
-        <section className="panel">
-          <h3>Lab orders</h3>
-          {history.labOrders.length === 0 ? <p className="muted">No lab orders.</p> : (
-            <ul>{history.labOrders.map((l) => (
-              <li key={l.id}><strong>{l.testName}</strong> <span className={`chip ${l.status}`}>{l.status}</span></li>
-            ))}</ul>
-          )}
-        </section>
+            <section className="panel">
+              <h3>Lab orders</h3>
+              {history.labOrders.length === 0 ? <p className="muted">No lab orders.</p> : (
+                <ul>{history.labOrders.map((l) => (
+                  <li key={l.id}><strong>{l.testName}</strong> <span className={`chip ${l.status}`}>{l.status}</span></li>
+                ))}</ul>
+              )}
+            </section>
+          </>
+        )}
       </div>
 
-      <section className="panel">
-        <h3>Vitals history</h3>
-        {history.vitals.length === 0 ? <p className="muted">No recorded vitals yet.</p> : (
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Recorded</th><th>BP</th><th>HR</th><th>Temp</th><th>SpO₂</th><th>By</th></tr></thead>
-              <tbody>
-                {history.vitals.map((v) => (
-                  <tr key={v.id}>
-                    <td>{new Date(v.recordedAt).toLocaleString()}</td>
-                    <td>{v.bp || '—'}</td>
-                    <td>{v.hr || '—'}</td>
-                    <td>{v.temp || '—'}</td>
-                    <td>{v.spo2 || '—'}</td>
-                    <td>{v.recordedByName}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      {canViewHistory && (
+        <section className="panel">
+          <h3>Vitals history</h3>
+          {history.vitals.length === 0 ? <p className="muted">No recorded vitals yet.</p> : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Recorded</th><th>BP</th><th>HR</th><th>Temp</th><th>SpO₂</th><th>By</th></tr></thead>
+                <tbody>
+                  {history.vitals.map((v) => (
+                    <tr key={v.id}>
+                      <td>{new Date(v.recordedAt).toLocaleString()}</td>
+                      <td>{v.bp || '—'}</td>
+                      <td>{v.hr || '—'}</td>
+                      <td>{v.temp || '—'}</td>
+                      <td>{v.spo2 || '—'}</td>
+                      <td>{v.recordedByName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

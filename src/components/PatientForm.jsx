@@ -93,16 +93,22 @@ export default function PatientForm() {
           <label>SSN last 4 digits
             <input value={form.ssnLast4} onChange={set('ssnLast4')} maxLength={4} placeholder="e.g. 4401" />
           </label>
-          <label>Allergies (comma separated)
-            <input value={form.allergies} onChange={set('allergies')} placeholder="Penicillin, Latex" />
-          </label>
-          <label>Conditions (comma separated)
-            <input value={form.conditions} onChange={set('conditions')} placeholder="Type 2 Diabetes, Hypertension" />
-          </label>
+          {!isEdit && (
+            <>
+              <label>Allergies (comma separated)
+                <input value={form.allergies} onChange={set('allergies')} placeholder="Penicillin, Latex" />
+              </label>
+              <label>Conditions (comma separated)
+                <input value={form.conditions} onChange={set('conditions')} placeholder="Type 2 Diabetes, Hypertension" />
+              </label>
+            </>
+          )}
         </div>
-        <label>Notes
-          <textarea value={form.notes} onChange={set('notes')} rows={3} />
-        </label>
+        {!isEdit && (
+          <label>Notes
+            <textarea value={form.notes} onChange={set('notes')} rows={3} />
+          </label>
+        )}
         <button type="submit" className="btn primary" disabled={saving}>
           {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Register patient'}
         </button>
