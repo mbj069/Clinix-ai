@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { NEXUS_TECH_LOGO } from '../assets/nexusTechLogo';
 
 const DEMO_ACCOUNTS = [
   { username: 'admin', password: 'admin123', role: 'Administrator — full access' },
@@ -36,7 +37,7 @@ export default function Login() {
     <div className="login-wrap">
       <div className="login-card">
         <div className="brand">
-          <img className="brand-logo" src="/nexus-tech-logo.webp" alt="Nexus-Tech Solutions" />
+          <img className="brand-logo" src={NEXUS_TECH_LOGO} alt="Nexus-Tech Solutions" />
           <div>
             <h1>Clinix AI</h1>
             <p>by Nexus-Tech Solutions</p>

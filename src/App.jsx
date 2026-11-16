@@ -1,5 +1,6 @@
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { NEXUS_TECH_LOGO } from './assets/nexusTechLogo';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -22,7 +23,7 @@ function Shell({ children }) {
   return (
     <div className="app">
       <header className="topbar">
-        <Link to="/" className="logo"><img className="brand-logo sm" src="/nexus-tech-logo.webp" alt="Nexus-Tech Solutions" /> Clinix AI</Link>
+        <Link to="/" className="logo"><img className="brand-logo sm" src={NEXUS_TECH_LOGO} alt="Nexus-Tech Solutions" /> Clinix AI</Link>
         <nav>
           <Link to="/">Dashboard</Link>
           <Link to="/patients">Patients</Link>
